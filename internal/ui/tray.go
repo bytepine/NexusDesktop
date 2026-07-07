@@ -22,9 +22,10 @@ import (
 type TrayController struct {
 	app     fyne.App
 	manager *unreal.Manager
-	// 设置窗口懒创建：首次点击「设置…」时才调用 app.NewWindow()，
+	// 懒创建窗口：首次点击时才调用 app.NewWindow()，
 	// 避免启动时创建窗口触发 Fyne 将激活策略切回 Regular（导致 Dock 图标）。
-	settings *SettingsWindow
+	settings  *SettingsWindow
+	configWin *configWindow
 
 	// 注入钩子：由 main 提供，用于热重启服务器
 	OnToggleServer     func(enabled bool)
@@ -57,6 +58,15 @@ func (tc *TrayController) openSettings() {
 		tc.settings.SetTray(tc)
 	}
 	tc.settings.Show()
+}
+
+// openConfigWindow 懒创建并显示 MCP 客户端配置窗口。
+func (tc *TrayController) openConfigWindow() {
+	if tc.configWin == nil {
+		tc.configWin = newConfigWindow(tc.app)
+	}
+	port := config.Get().HTTPPort
+	tc.configWin.show(port)
 }
 
 // SetUpdateState 更新检查结果写入后刷新菜单，供外部（main）在事件循环就绪后调用。
@@ -147,14 +157,9 @@ func (tc *TrayController) rebuildMenu() {
 		tc.Refresh()
 	})
 
-	// 「复制 MCP 客户端配置」
-	copyConfig := fyne.NewMenuItem("复制 MCP 客户端配置", func() {
-		port := tc.manager.ConnectedPort
-		if port <= 0 {
-			port = cfg.HTTPPort
-		}
-		json := fmt.Sprintf(`{"mcpServers":{"nexus-unreal":{"url":"http://127.0.0.1:%d/stream"}}}`, cfg.HTTPPort)
-		tc.app.Clipboard().SetContent(json)
+	// 「MCP 客户端配置」—— 打开配置展示窗口，参考 NexusRider 设置面板
+	copyConfig := fyne.NewMenuItem("MCP 客户端配置…", func() {
+		tc.openConfigWindow()
 	})
 
 	// 「设置…」打开设置窗口（懒创建）
