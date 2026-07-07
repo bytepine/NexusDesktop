@@ -13,7 +13,6 @@ import (
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/theme"
 
-	"github.com/bytepine/NexusDesktop/assets"
 	"github.com/bytepine/NexusDesktop/internal/config"
 	"github.com/bytepine/NexusDesktop/internal/log"
 	"github.com/bytepine/NexusDesktop/internal/unreal"
@@ -199,14 +198,8 @@ func (tc *TrayController) rebuildMenu() {
 	tc.deskApp.SetSystemTrayMenu(tc.menu)
 }
 
-var appIcon = fyne.NewStaticResource("icon.png", assets.IconPNG)
-
 func (tc *TrayController) updateIcon() {
-	if tc.manager.Snapshot().WsOpen {
-		tc.deskApp.SetSystemTrayIcon(theme.ComputerIcon()) // 已连接：绿色电脑图标
-	} else {
-		tc.deskApp.SetSystemTrayIcon(appIcon) // 未连接：品牌图标
-	}
+	tc.deskApp.SetSystemTrayIcon(theme.ComputerIcon())
 }
 
 // openDirectory 用系统默认文件管理器打开目录。
