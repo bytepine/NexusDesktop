@@ -56,6 +56,8 @@ type Manager struct {
 	Instances     []InstanceInfo
 	ConnectedPort int
 	PreferredPort int
+	// manuallyDisconnected 表示用户主动断开，抑制自动重连直到用户手动连接。
+	manuallyDisconnected bool
 
 	ScanPortStart int
 	ScanPortEnd   int
@@ -228,12 +230,13 @@ func (m *Manager) DiscoverInstances() []InstanceInfo {
 		}
 	}
 
-	// 未连接时自动选择目标
+	// 未连接时自动选择目标（用户手动断开后不自动重连）
 	m.mu.Lock()
 	connPort = m.ConnectedPort
 	prefPort := m.PreferredPort
+	manuallyDisc := m.manuallyDisconnected
 	m.mu.Unlock()
-	if connPort < 0 && len(found) > 0 {
+	if connPort < 0 && len(found) > 0 && !manuallyDisc {
 		var target *InstanceInfo
 		if prefPort > 0 {
 			for i := range found {
@@ -367,6 +370,7 @@ func (m *Manager) ConnectTo(port int, setPreferred bool) bool {
 	if setPreferred {
 		m.mu.Lock()
 		m.PreferredPort = port
+		m.manuallyDisconnected = false // 用户主动选择，恢复自动重连
 		m.mu.Unlock()
 	}
 	m.mu.Lock()
@@ -419,8 +423,10 @@ func (m *Manager) ConnectTo(port int, setPreferred bool) bool {
 }
 
 // Disconnect 主动断开当前连接，清除 preferredPort。
+// Disconnect 主动断开连接并抑制自动重连，直到用户手动连接。
 func (m *Manager) Disconnect() {
 	m.mu.Lock()
+	m.manuallyDisconnected = true
 	m.resetWsConnection(true)
 	m.mu.Unlock()
 }
@@ -437,6 +443,7 @@ func (m *Manager) isWsOpen() bool {
 }
 
 // EnsureLongConnection 确保长连接可用；不可用时尝试重连或重新发现。
+// 用户手动断开后不自动重连，直到下次主动连接。
 func (m *Manager) EnsureLongConnection() bool {
 	if m.IsWsOpen() {
 		return true
@@ -446,8 +453,12 @@ func (m *Manager) EnsureLongConnection() bool {
 	if reconnPort < 0 {
 		reconnPort = m.PreferredPort
 	}
+	manuallyDisc := m.manuallyDisconnected
 	m.mu.Unlock()
 
+	if manuallyDisc {
+		return false
+	}
 	if reconnPort > 0 {
 		return m.ConnectTo(reconnPort, false)
 	}
