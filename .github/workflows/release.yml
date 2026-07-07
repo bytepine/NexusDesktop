@@ -26,7 +26,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version: "1.24.x"
+          go-version: "1.25.x"
 
       - name: Install rsrc (Windows icon embedding)
         run: go install github.com/akavel/rsrc@latest
@@ -50,7 +50,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version: "1.24.x"
+          go-version: "1.25.x"
 
       - name: Build macOS Universal DMG
         run: |
