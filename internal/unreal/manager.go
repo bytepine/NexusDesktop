@@ -80,8 +80,9 @@ type Manager struct {
 	discoveryInFlight chan struct{} // 非 nil 表示有扫描在进行
 
 	// 事件回调（非阻塞调用，调用方需在 goroutine 内注册）
-	OnConnectionChanged func(port int)
-	OnToolsChanged      func()
+	OnConnectionChanged  func(port int)
+	OnToolsChanged       func()
+	OnInstancesChanged   func() // 实例列表内容发生变化时触发
 }
 
 // NewManager 创建并返回一个 Manager，使用默认扫描范围。
@@ -166,11 +167,18 @@ func (m *Manager) DiscoverInstances() []InstanceInfo {
 	found := m.scanPortsParallel()
 
 	m.mu.Lock()
+	changed := !instancesEqual(m.Instances, found)
 	m.Instances = found
 	wsOpen := m.isWsOpen()
 	connPort := m.ConnectedPort
 	pending := len(m.pendingRequests)
+	cb := m.OnInstancesChanged
 	m.mu.Unlock()
+
+	// 仅实例列表真正变化时才触发托盘刷新
+	if changed && cb != nil {
+		go cb()
+	}
 
 	// WS 已关但 connectedPort 未重置（竞态兜底）
 	if connPort > 0 && !wsOpen && pending == 0 {
@@ -764,4 +772,21 @@ func (m *Manager) Dispose() {
 	m.mu.Lock()
 	m.resetWsConnection(true)
 	m.mu.Unlock()
+}
+
+// instancesEqual 比较两个实例列表的端口集合是否相同（顺序无关）。
+func instancesEqual(a, b []InstanceInfo) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	ports := make(map[int]struct{}, len(a))
+	for _, inst := range a {
+		ports[inst.Port] = struct{}{}
+	}
+	for _, inst := range b {
+		if _, ok := ports[inst.Port]; !ok {
+			return false
+		}
+	}
+	return true
 }

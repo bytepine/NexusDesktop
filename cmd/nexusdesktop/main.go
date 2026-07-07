@@ -97,6 +97,10 @@ func main() {
 		mgr.OnToolsChanged = func() {
 			srv.SendToolsChangedNotification()
 		}
+		// 实例列表变化（新增/消失）→ 刷新托盘，但不影响已打开的菜单正常交互
+		mgr.OnInstancesChanged = func() {
+			tray.Refresh()
+		}
 	}
 
 	stopServer := func() {
@@ -109,6 +113,7 @@ func main() {
 		server = nil
 		mgr.OnConnectionChanged = nil
 		mgr.OnToolsChanged = nil
+		mgr.OnInstancesChanged = nil
 	}
 
 	startScanTimer := func() {
@@ -137,7 +142,9 @@ func main() {
 					mu.Unlock()
 					if srvRunning {
 						mgr.MaintainConnection()
-						tray.Refresh()
+						// 不在此处调用 tray.Refresh()：
+						// 实例列表变化由 OnInstancesChanged 驱动，连接变化由 OnConnectionChanged 驱动，
+						// 避免定时器每 5s 强制重建菜单导致打开中的菜单被关闭。
 					}
 				}
 			}
@@ -145,7 +152,6 @@ func main() {
 		// 立即执行一次发现
 		go func() {
 			mgr.MaintainConnection()
-			tray.Refresh()
 		}()
 	}
 
