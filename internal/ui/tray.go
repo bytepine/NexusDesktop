@@ -20,12 +20,14 @@ import (
 
 // TrayController 管理系统托盘的菜单与图标状态。
 type TrayController struct {
-	app      fyne.App
-	manager  *unreal.Manager
+	app     fyne.App
+	manager *unreal.Manager
+	// 设置窗口懒创建：首次点击「设置…」时才调用 app.NewWindow()，
+	// 避免启动时创建窗口触发 Fyne 将激活策略切回 Regular（导致 Dock 图标）。
 	settings *SettingsWindow
 
 	// 注入钩子：由 main 提供，用于热重启服务器
-	OnToggleServer    func(enabled bool)
+	OnToggleServer     func(enabled bool)
 	OnRefreshInstances func()
 
 	deskApp desktop.App
@@ -33,16 +35,24 @@ type TrayController struct {
 }
 
 // NewTrayController 创建托盘控制器。app 必须实现 desktop.App（Fyne 桌面应用）。
-func NewTrayController(app fyne.App, mgr *unreal.Manager, sw *SettingsWindow) *TrayController {
+func NewTrayController(app fyne.App, mgr *unreal.Manager) *TrayController {
 	tc := &TrayController{
-		app:      app,
-		manager:  mgr,
-		settings: sw,
+		app:     app,
+		manager: mgr,
 	}
 	if da, ok := app.(desktop.App); ok {
 		tc.deskApp = da
 	}
 	return tc
+}
+
+// openSettings 懒创建并显示设置窗口。
+func (tc *TrayController) openSettings() {
+	if tc.settings == nil {
+		tc.settings = NewSettingsWindow(tc.app, tc.manager)
+		tc.settings.SetTray(tc)
+	}
+	tc.settings.Show()
 }
 
 // Setup 初始化托盘图标与菜单，需在 Fyne 事件循环启动后调用。
@@ -137,9 +147,9 @@ func (tc *TrayController) rebuildMenu() {
 		tc.app.Clipboard().SetContent(json)
 	})
 
-	// 「设置…」打开设置窗口
+	// 「设置…」打开设置窗口（懒创建）
 	settingsItem := fyne.NewMenuItem("设置…", func() {
-		tc.settings.Show()
+		tc.openSettings()
 	})
 
 	// 「打开日志目录」

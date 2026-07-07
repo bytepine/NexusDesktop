@@ -210,11 +210,49 @@ def _embed_windows_icon(root: str, go: str, env: dict) -> str | None:
     return syso_path
 
 
-def build_desktop(version: str, output_dir: str, build_type: str = "develop") -> str:
+def _go_build_binary(
+    go: str, env: dict, root: str,
+    goos: str, goarch: str,
+    out_path: str, ldflags: str,
+) -> None:
+    """编译单一 GOOS/GOARCH 二进制；失败抛 RuntimeError。"""
+    build_env = env.copy()
+    build_env["GOOS"] = goos
+    build_env["GOARCH"] = goarch
+    print(f"[build] go build {goos}/{goarch} → {out_path}")
+    print(f"        CGO_ENABLED=1 ldflags={ldflags.strip()!r}")
+    result = subprocess.run(
+        [go, "build", "-ldflags", ldflags.strip(), "-o", out_path,
+         "./cmd/nexusdesktop/"],
+        cwd=root, env=build_env,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"go build {goos}/{goarch} 失败（返回码 {result.returncode}）")
+
+
+def _lipo_merge(arm64_bin: str, amd64_bin: str, out_path: str) -> None:
+    """用 lipo 将 arm64 + amd64 合并为 Universal Binary；失败抛 RuntimeError。"""
+    if not shutil.which("lipo"):
+        raise RuntimeError("未找到 lipo，请安装 Xcode Command Line Tools")
+    result = subprocess.run(
+        ["lipo", "-create", "-output", out_path, arm64_bin, amd64_bin]
+    )
+    if result.returncode != 0:
+        raise RuntimeError("lipo 合并失败")
+    size_mb = os.path.getsize(out_path) / (1024 * 1024)
+    print(f"[build] Universal Binary：{size_mb:.1f} MB → {out_path}")
+
+
+def build_desktop(
+    version: str,
+    output_dir: str,
+    build_type: str = "develop",
+    arch_target: str = "auto",
+) -> str:
     """
-    build_type: "develop" | "release"
-      develop — debug 日志，Windows 显示控制台，不裁剪符号，产物加 -dev 后缀
-      release — info 日志，Windows 隐藏控制台，-s -w 裁剪，产物标准命名
+    build_type : "develop" | "release"
+    arch_target: macOS 专用 — "universal"（默认）| "arm64" | "amd64"
+                 其他平台忽略此参数。
     """
     is_release = build_type == "release"
     log_level = "info" if is_release else "debug"
@@ -228,6 +266,7 @@ def build_desktop(version: str, output_dir: str, build_type: str = "develop") ->
 
     system = platform.system()
     machine = platform.machine().lower()
+    os.makedirs(output_dir, exist_ok=True)
 
     if system == "Windows":
         _prepend_w64devkit(env)
@@ -240,18 +279,53 @@ def build_desktop(version: str, output_dir: str, build_type: str = "develop") ->
             f"-X main.appVersion={version} "
             f"-X {_LOG_PKG}.Level={log_level}"
         )
-        goos, goarch = "windows", arch
+        out_path = os.path.join(output_dir, out_name)
+        syso_path = _embed_windows_icon(root, go, env)
+        try:
+            _go_build_binary(go, env, root, "windows", arch, out_path, ldflags)
+        finally:
+            if syso_path and os.path.isfile(syso_path):
+                os.remove(syso_path)
+                print(f"[icon] 已清理: {syso_path}")
+        size_mb = os.path.getsize(out_path) / (1024 * 1024)
+        print(f"[build] 产物大小：{size_mb:.1f} MB")
+        return out_path
+
     elif system == "Darwin":
-        # Apple Silicon → arm64；Intel → amd64
-        arch = "arm64" if "arm" in machine or "aarch" in machine else "amd64"
         suffix = "" if is_release else "-dev"
-        out_name = f"NexusDesktop-darwin-{arch}{suffix}"
         ldflags = (
             f"{strip_flags}"
             f"-X main.appVersion={version} "
             f"-X {_LOG_PKG}.Level={log_level}"
         )
-        goos, goarch = "darwin", arch
+
+        # 决定目标架构
+        if arch_target in ("auto", "universal"):
+            target_arch = "universal"
+        elif arch_target in ("arm64", "amd64"):
+            target_arch = arch_target
+        else:
+            raise RuntimeError(f"不支持的 arch_target: {arch_target}")
+
+        if target_arch == "universal":
+            # 分别编译 arm64 / amd64，再 lipo 合并
+            arm64_tmp = os.path.join(output_dir, f"_nexusdesktop-arm64{suffix}")
+            amd64_tmp = os.path.join(output_dir, f"_nexusdesktop-amd64{suffix}")
+            _go_build_binary(go, env, root, "darwin", "arm64", arm64_tmp, ldflags)
+            _go_build_binary(go, env, root, "darwin", "amd64", amd64_tmp, ldflags)
+            out_path = os.path.join(output_dir, f"NexusDesktop-darwin-universal{suffix}")
+            _lipo_merge(arm64_tmp, amd64_tmp, out_path)
+            os.remove(arm64_tmp)
+            os.remove(amd64_tmp)
+        else:
+            out_path = os.path.join(output_dir, f"NexusDesktop-darwin-{target_arch}{suffix}")
+            _go_build_binary(go, env, root, "darwin", target_arch, out_path, ldflags)
+            size_mb = os.path.getsize(out_path) / (1024 * 1024)
+            print(f"[build] 产物大小：{size_mb:.1f} MB")
+
+        app_path = _package_macos_app(root, out_path, version, output_dir, target_arch)
+        return app_path if app_path else out_path
+
     elif system == "Linux":
         arch = "arm64" if "aarch" in machine else "amd64"
         suffix = "" if is_release else "-dev"
@@ -261,52 +335,64 @@ def build_desktop(version: str, output_dir: str, build_type: str = "develop") ->
             f"-X main.appVersion={version} "
             f"-X {_LOG_PKG}.Level={log_level}"
         )
-        goos, goarch = "linux", arch
+        out_path = os.path.join(output_dir, out_name)
+        _go_build_binary(go, env, root, "linux", arch, out_path, ldflags)
+        size_mb = os.path.getsize(out_path) / (1024 * 1024)
+        print(f"[build] 产物大小：{size_mb:.1f} MB")
+        return out_path
+
     else:
         raise RuntimeError(f"不支持的平台: {system}")
 
-    os.makedirs(output_dir, exist_ok=True)
-    out_path = os.path.join(output_dir, out_name)
 
-    # Windows：嵌入品牌图标到 exe（生成临时 resource.syso）
-    syso_path: str | None = None
-    if system == "Windows":
-        syso_path = _embed_windows_icon(root, go, env)
+def _create_icns(png_path: str, icns_path: str) -> bool:
+    """
+    用 macOS 内置 sips + iconutil 将 PNG 转为 .icns。
+    需要 Xcode CLI；失败时返回 False，构建继续。
+    """
+    if not shutil.which("sips") or not shutil.which("iconutil"):
+        print("[WARN] sips/iconutil 未找到，跳过 .icns 生成", file=sys.stderr)
+        return False
 
-    try:
-        cmd = [
-            go, "build",
-            "-ldflags", ldflags.strip(),
-            "-o", out_path,
-            "./cmd/nexusdesktop/",
-        ]
+    iconset_dir = icns_path.replace(".icns", ".iconset")
+    os.makedirs(iconset_dir, exist_ok=True)
 
-        build_env = env.copy()
-        build_env["GOOS"] = goos
-        build_env["GOARCH"] = goarch
-
-        print(f"[build] go build v{version} ({build_type}) → {out_path}")
-        print(f"        GOOS={goos} GOARCH={goarch} CGO_ENABLED=1 log.Level={log_level}")
-
-        result = subprocess.run(cmd, cwd=root, env=build_env)
+    # macOS 标准图标尺寸：(尺寸, 文件名)
+    sizes = [
+        (16,   "icon_16x16.png"),
+        (32,   "icon_16x16@2x.png"),
+        (32,   "icon_32x32.png"),
+        (64,   "icon_32x32@2x.png"),
+        (128,  "icon_128x128.png"),
+        (256,  "icon_128x128@2x.png"),
+        (256,  "icon_256x256.png"),
+        (512,  "icon_256x256@2x.png"),
+        (512,  "icon_512x512.png"),
+        (1024, "icon_512x512@2x.png"),
+    ]
+    for size, name in sizes:
+        result = subprocess.run(
+            ["sips", "-z", str(size), str(size), png_path, "--out",
+             os.path.join(iconset_dir, name)],
+            capture_output=True,
+        )
         if result.returncode != 0:
-            raise RuntimeError(f"go build 失败（返回码 {result.returncode}）")
-    finally:
-        # 清理临时 resource.syso（避免污染源码目录）
-        if syso_path and os.path.isfile(syso_path):
-            os.remove(syso_path)
-            print(f"[icon] 已清理: {syso_path}")
+            print(f"[WARN] sips 缩放 {size}x{size} 失败", file=sys.stderr)
+            shutil.rmtree(iconset_dir, ignore_errors=True)
+            return False
 
-    size_mb = os.path.getsize(out_path) / (1024 * 1024)
-    print(f"[build] 产物大小：{size_mb:.1f} MB")
+    result = subprocess.run(
+        ["iconutil", "-c", "icns", iconset_dir, "-o", icns_path],
+        capture_output=True,
+    )
+    shutil.rmtree(iconset_dir, ignore_errors=True)
 
-    # macOS：可选封装为 .app bundle
-    if system == "Darwin":
-        app_path = _package_macos_app(root, out_path, version, output_dir, arch)
-        if app_path:
-            return app_path
+    if result.returncode != 0 or not os.path.isfile(icns_path):
+        print("[WARN] iconutil 失败，跳过 .icns 生成", file=sys.stderr)
+        return False
 
-    return out_path
+    print(f"[icon] .icns 已生成: {icns_path}")
+    return True
 
 
 def _package_macos_app(
@@ -323,6 +409,16 @@ def _package_macos_app(
     shutil.copy2(binary, os.path.join(macos_dir, "NexusDesktop"))
     os.chmod(os.path.join(macos_dir, "NexusDesktop"), 0o755)
 
+    # PNG → .icns，放入 Resources
+    icon_png = os.path.join(root, "assets", "icon.png")
+    icon_name = "AppIcon"
+    icns_path = os.path.join(res_dir, f"{icon_name}.icns")
+    has_icon = os.path.isfile(icon_png) and _create_icns(icon_png, icns_path)
+    icon_plist_entry = (
+        f"  <key>CFBundleIconFile</key><string>{icon_name}</string>\n"
+        if has_icon else ""
+    )
+
     # 写入 Info.plist
     plist = f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -333,7 +429,7 @@ def _package_macos_app(
   <key>CFBundleName</key><string>NexusDesktop</string>
   <key>CFBundleShortVersionString</key><string>{version}</string>
   <key>CFBundleVersion</key><string>{version}</string>
-  <key>LSUIElement</key><true/>
+{icon_plist_entry}  <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>
 </dict>
 </plist>
@@ -341,21 +437,43 @@ def _package_macos_app(
     with open(os.path.join(app_dir, "Contents", "Info.plist"), "w", encoding="utf-8") as f:
         f.write(plist)
 
-    # 打 zip
-    zip_name = f"NexusDesktop-darwin-{arch}.app.zip"
-    zip_path = os.path.join(output_dir, zip_name)
-    result = subprocess.run(
-        ["zip", "-r", zip_path, "NexusDesktop.app"],
-        cwd=output_dir,
-    )
-    if result.returncode != 0:
-        print("[WARN] zip 失败，跳过 .app 封装", file=sys.stderr)
-        return None
+    # 打 DMG（含 Applications 快捷方式，支持拖拽安装）
+    dmg_name = f"NexusDesktop-darwin-{arch}.dmg"
+    dmg_path = os.path.join(output_dir, dmg_name)
 
+    # staging 目录：.app + /Applications 软链
+    staging_dir = os.path.join(output_dir, "_dmg_staging")
+    if os.path.exists(staging_dir):
+        shutil.rmtree(staging_dir)
+    os.makedirs(staging_dir)
+    shutil.copytree(app_dir, os.path.join(staging_dir, "NexusDesktop.app"),
+                    symlinks=True)
+    os.symlink("/Applications", os.path.join(staging_dir, "Applications"))
+
+    # 删除旧 DMG（hdiutil -ov 覆盖有时有 bug，先手动删）
+    if os.path.exists(dmg_path):
+        os.remove(dmg_path)
+
+    result = subprocess.run(
+        [
+            "hdiutil", "create",
+            "-volname", "NexusDesktop",
+            "-srcfolder", staging_dir,
+            "-ov",
+            "-format", "UDZO",
+            dmg_path,
+        ],
+    )
+    shutil.rmtree(staging_dir)
     shutil.rmtree(app_dir)
     os.remove(binary)
-    print(f"[build] .app 封装完成：{zip_path}")
-    return zip_path
+
+    if result.returncode != 0:
+        print("[WARN] hdiutil 失败，跳过 DMG 封装", file=sys.stderr)
+        return None
+
+    print(f"[build] DMG 封装完成：{dmg_path}")
+    return dmg_path
 
 
 def main() -> int:
@@ -368,6 +486,12 @@ def main() -> int:
         choices=["develop", "release"],
         help="构建类型：develop（默认，debug 日志）或 release（info 日志，裁剪符号）",
     )
+    parser.add_argument(
+        "--arch",
+        default="universal",
+        choices=["universal", "arm64", "amd64"],
+        help="macOS 目标架构：universal（默认，arm64+amd64）| arm64 | amd64",
+    )
     args = parser.parse_args()
 
     root = repo_root()
@@ -375,7 +499,7 @@ def main() -> int:
 
     try:
         version = args.version or read_version(root)
-        path = build_desktop(version, output_dir, args.build_type)
+        path = build_desktop(version, output_dir, args.build_type, args.arch)
     except Exception as e:
         print(f"[ERROR] {e}", file=sys.stderr)
         return 1
