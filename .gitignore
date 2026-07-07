@@ -11,6 +11,10 @@ cmd/nexusdesktop/resource.syso
 # Go
 vendor/
 
+# Python
+__pycache__/
+*.pyc
+
 # Editor
 .vscode/
 .idea/
