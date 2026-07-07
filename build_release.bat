@@ -3,9 +3,9 @@ setlocal enabledelayedexpansion
 chcp 65001 >nul 2>&1
 
 echo ============================================
-echo   NexusDesktop - Develop Build (Windows)
-echo   日志级别：DEBUG（所有日志可见）
-echo   产物：NexusDesktop-windows-amd64-dev.exe
+echo   NexusDesktop - Release Build (Windows)
+echo   日志级别：INFO（debug 日志不输出）
+echo   产物：NexusDesktop-windows-amd64.exe
 echo ============================================
 echo.
 
@@ -44,12 +44,10 @@ if exist "%LOCALAPPDATA%\Programs\Go\bin\go.exe" (
 
 echo [ERROR] 找不到 go 命令。
 echo         请安装 Go 1.24+：https://go.dev/dl/
-echo         或将 Go\bin 路径加入系统 PATH。
 pause
 exit /b 1
 
 :go_ok
-echo [Go] %PATH:~0,0%%GOROOT% (from PATH)
 for /f "tokens=*" %%v in ('go version 2^>nul') do echo [Go] %%v
 echo.
 
@@ -94,19 +92,17 @@ if exist "C:\w64devkit\bin\gcc.exe" (
 echo [WARN] 未找到 GCC！Fyne 需要 CGO。
 echo        请安装 w64devkit v1.23.0 (GCC 14)：
 echo        https://github.com/skeeto/w64devkit/releases/tag/v1.23.0
-echo        解压后将 bin 路径写入环境变量 W64DEVKIT，或加入系统 PATH。
-echo.
 pause
 exit /b 1
 
 :gcc_ok
 echo.
 
-:: ── 3. 调用 Python 打包脚本 ──────────────────────────────
-echo [1/2] Building NexusDesktop develop (version: %VERSION%)...
+:: ── 3. 调用 Python 打包脚本（release 模式）───────────────
+echo [1/2] Building NexusDesktop release (version: %VERSION%)...
 echo       (首次构建需下载依赖，约需 1-5 分钟，请耐心等待...)
 echo.
-python scripts\build_desktop.py --version %VERSION% --build-type develop
+python scripts\build_desktop.py --version %VERSION% --build-type release
 if %ERRORLEVEL% neq 0 (
     echo.
     echo [FAILED] Build failed! See output above for details.
@@ -116,8 +112,8 @@ if %ERRORLEVEL% neq 0 (
 
 :: ── 4. 显示产物路径 ──────────────────────────────────────
 echo.
-echo [2/2] Build successful!
+echo [2/2] Release build successful!
 echo.
-echo Output: %cd%\release\NexusDesktop-windows-amd64-dev.exe
+echo Output: %cd%\release\NexusDesktop-windows-amd64.exe
 echo.
 pause

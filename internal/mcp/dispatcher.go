@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/bytepine/NexusDesktop/internal/log"
 	"github.com/bytepine/NexusDesktop/internal/unreal"
 )
 
@@ -78,6 +79,8 @@ func (d *Dispatcher) Dispatch(body string) (string, error) {
 	}
 	id := msg["id"]
 	params, _ := msg["params"].(map[string]interface{})
+
+	log.Debugf("MCP dispatch method=%s id=%v", method, id)
 
 	switch method {
 	case "initialize":
@@ -198,6 +201,7 @@ func (d *Dispatcher) handleToolsCall(id interface{}, params map[string]interface
 	if toolName == "" {
 		return makeError(id, errInvalidParams, "Missing tool name"), nil
 	}
+	log.Debugf("tools/call tool=%s", toolName)
 
 	proxyCfg := d.manager.GetProxyConfig()
 

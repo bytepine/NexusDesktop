@@ -2,16 +2,21 @@
 build_desktop.py — NexusDesktop 跨平台构建脚本
 
 用法:
-    python scripts/build_desktop.py [--version <版本号>] [--output <输出目录>]
+    python scripts/build_desktop.py [--version <版本号>] [--output <目录>]
+                                    [--build-type develop|release]
 
-说明:
-    1. 读取 VERSION 文件确定版本号（--version 可覆盖）
-    2. 检测当前平台并设置对应构建参数
-    3. go build，通过 -X main.appVersion 注入版本号
-    4. Windows 产物：NexusDesktop-windows-amd64.exe
-       macOS   产物：NexusDesktop-darwin-<arch>（可选 fyne package 为 .app）
-       Linux   产物：NexusDesktop-linux-amd64
-    5. 复制到 --output 目录（默认 release/）
+构建类型：
+    develop（默认）
+        - 日志级别 debug（所有日志可见）
+        - Windows 保留控制台窗口（便于查看实时日志）
+        - 不裁剪符号（方便 panic 堆栈阅读）
+        - 产物名加 -dev 后缀，如 NexusDesktop-windows-amd64-dev.exe
+
+    release
+        - 日志级别 info（debug 日志不输出）
+        - Windows 隐藏控制台窗口（-H=windowsgui）
+        - -s -w 裁剪符号，减小体积
+        - 产物名不带后缀，如 NexusDesktop-windows-amd64.exe
 
 平台要求：
     Windows : GCC 14.x（如 w64devkit v1.23.0）。
@@ -134,7 +139,19 @@ def _prepend_w64devkit(env: dict) -> None:
     )
 
 
-def build_desktop(version: str, output_dir: str) -> str:
+_LOG_PKG = "github.com/bytepine/NexusDesktop/internal/log"
+
+
+def build_desktop(version: str, output_dir: str, build_type: str = "develop") -> str:
+    """
+    build_type: "develop" | "release"
+      develop — debug 日志，Windows 显示控制台，不裁剪符号，产物加 -dev 后缀
+      release — info 日志，Windows 隐藏控制台，-s -w 裁剪，产物标准命名
+    """
+    is_release = build_type == "release"
+    log_level = "info" if is_release else "debug"
+    strip_flags = "-s -w " if is_release else ""
+
     root = repo_root()
     go = find_go()
 
@@ -147,19 +164,35 @@ def build_desktop(version: str, output_dir: str) -> str:
     if system == "Windows":
         _prepend_w64devkit(env)
         arch = "amd64"
-        out_name = f"NexusDesktop-windows-{arch}.exe"
-        ldflags = f"-H=windowsgui -s -w -X main.appVersion={version}"
+        suffix = "" if is_release else "-dev"
+        out_name = f"NexusDesktop-windows-{arch}{suffix}.exe"
+        win_flags = "-H=windowsgui " if is_release else ""
+        ldflags = (
+            f"{win_flags}{strip_flags}"
+            f"-X main.appVersion={version} "
+            f"-X {_LOG_PKG}.Level={log_level}"
+        )
         goos, goarch = "windows", arch
     elif system == "Darwin":
         # Apple Silicon → arm64；Intel → amd64
         arch = "arm64" if "arm" in machine or "aarch" in machine else "amd64"
-        out_name = f"NexusDesktop-darwin-{arch}"
-        ldflags = f"-s -w -X main.appVersion={version}"
+        suffix = "" if is_release else "-dev"
+        out_name = f"NexusDesktop-darwin-{arch}{suffix}"
+        ldflags = (
+            f"{strip_flags}"
+            f"-X main.appVersion={version} "
+            f"-X {_LOG_PKG}.Level={log_level}"
+        )
         goos, goarch = "darwin", arch
     elif system == "Linux":
         arch = "arm64" if "aarch" in machine else "amd64"
-        out_name = f"NexusDesktop-linux-{arch}"
-        ldflags = f"-s -w -X main.appVersion={version}"
+        suffix = "" if is_release else "-dev"
+        out_name = f"NexusDesktop-linux-{arch}{suffix}"
+        ldflags = (
+            f"{strip_flags}"
+            f"-X main.appVersion={version} "
+            f"-X {_LOG_PKG}.Level={log_level}"
+        )
         goos, goarch = "linux", arch
     else:
         raise RuntimeError(f"不支持的平台: {system}")
@@ -169,7 +202,7 @@ def build_desktop(version: str, output_dir: str) -> str:
 
     cmd = [
         go, "build",
-        "-ldflags", ldflags,
+        "-ldflags", ldflags.strip(),
         "-o", out_path,
         "./cmd/nexusdesktop/",
     ]
@@ -178,8 +211,8 @@ def build_desktop(version: str, output_dir: str) -> str:
     build_env["GOOS"] = goos
     build_env["GOARCH"] = goarch
 
-    print(f"[build] go build v{version} → {out_path}")
-    print(f"        GOOS={goos} GOARCH={goarch} CGO_ENABLED=1")
+    print(f"[build] go build v{version} ({build_type}) → {out_path}")
+    print(f"        GOOS={goos} GOARCH={goarch} CGO_ENABLED=1 log.Level={log_level}")
 
     result = subprocess.run(cmd, cwd=root, env=build_env)
     if result.returncode != 0:
@@ -250,6 +283,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="构建 NexusDesktop 跨平台二进制")
     parser.add_argument("--version", default=None, help="版本号，默认读取 VERSION 文件")
     parser.add_argument("--output", default=None, help="输出目录，默认 <repo>/release/")
+    parser.add_argument(
+        "--build-type",
+        default="develop",
+        choices=["develop", "release"],
+        help="构建类型：develop（默认，debug 日志）或 release（info 日志，裁剪符号）",
+    )
     args = parser.parse_args()
 
     root = repo_root()
@@ -257,7 +296,7 @@ def main() -> int:
 
     try:
         version = args.version or read_version(root)
-        path = build_desktop(version, output_dir)
+        path = build_desktop(version, output_dir, args.build_type)
     except Exception as e:
         print(f"[ERROR] {e}", file=sys.stderr)
         return 1

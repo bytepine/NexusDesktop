@@ -8,7 +8,8 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 echo "============================================"
-echo "  NexusDesktop - Build (macOS)"
+echo "  NexusDesktop - Develop Build (macOS)"
+echo "  日志级别：DEBUG（所有日志可见）"
 echo "============================================"
 echo
 
@@ -42,8 +43,8 @@ if ! command -v gcc &>/dev/null; then
 fi
 
 # ── 5. 调用 Python 构建脚本 ──────────────────────────────
-echo "[1/2] Building NexusDesktop (version: $VERSION)..."
-"$PYTHON" scripts/build_desktop.py --version "$VERSION"
+echo "[1/2] Building NexusDesktop develop (version: $VERSION)..."
+"$PYTHON" scripts/build_desktop.py --version "$VERSION" --build-type develop
 
 echo
 echo "[2/2] Build successful!"

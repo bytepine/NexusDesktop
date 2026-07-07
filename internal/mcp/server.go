@@ -221,6 +221,7 @@ func (s *Server) handlePost(w http.ResponseWriter, r *http.Request) {
 	var dispatcher *Dispatcher
 	if isInit {
 		sessionID = newSessionID()
+		log.Debugf("MCP 新会话 session=%s", sessionID[:8])
 		dispatcher = NewDispatcher(s.manager, func() { s.SendToolsChangedNotification() }, s.version)
 		s.sessions[sessionID] = dispatcher
 		s.sessionOrder = append(s.sessionOrder, sessionID)
@@ -247,6 +248,7 @@ func (s *Server) handlePost(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 
 	if dispatcher == nil {
+		log.Debugf("MCP 请求无效 session=%s", incomingSessionID)
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Invalid or missing Mcp-Session-Id"})
 		return
 	}

@@ -165,6 +165,7 @@ func (m *Manager) DiscoverInstances() []InstanceInfo {
 	}()
 
 	found := m.scanPortsParallel()
+	log.Debugf("端口扫描完成，发现 %d 个 UE 实例", len(found))
 
 	m.mu.Lock()
 	changed := !instancesEqual(m.Instances, found)
@@ -745,6 +746,7 @@ func (m *Manager) sendWsRequest(method string, params map[string]interface{}, ti
 	}
 	ch := make(chan WsRequestResult, 1)
 	m.pendingRequests[id] = ch
+	log.Debugf("WS → method=%s id=%d", method, id)
 	err := m.ws.WriteJSON(req)
 	m.mu.Unlock()
 
@@ -758,11 +760,13 @@ func (m *Manager) sendWsRequest(method string, params map[string]interface{}, ti
 
 	select {
 	case result := <-ch:
+		log.Debugf("WS ← method=%s id=%d status=%s", method, id, result.Status)
 		return result
 	case <-time.After(timeout):
 		m.mu.Lock()
 		delete(m.pendingRequests, id)
 		m.mu.Unlock()
+		log.Warnf("WS 超时 method=%s id=%d", method, id)
 		return WsRequestResult{Status: "timeout"}
 	}
 }
