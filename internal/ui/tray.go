@@ -174,6 +174,10 @@ func (tc *TrayController) rebuildMenu() {
 		}
 	})
 
+	quitItem := fyne.NewMenuItem("退出 NexusDesktop", func() {
+		tc.app.Quit()
+	})
+
 	menuItems := []*fyne.MenuItem{
 		fyne.NewMenuItem(statusLabel, nil),
 		fyne.NewMenuItemSeparator(),
@@ -186,6 +190,8 @@ func (tc *TrayController) rebuildMenu() {
 		settingsItem,
 		openLogs,
 		autostartItem,
+		fyne.NewMenuItemSeparator(),
+		quitItem,
 	}
 	tc.menu = fyne.NewMenu("NexusDesktop", menuItems...)
 	tc.deskApp.SetSystemTrayMenu(tc.menu)
