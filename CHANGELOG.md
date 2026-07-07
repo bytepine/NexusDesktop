@@ -5,6 +5,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- 托盘菜单「检查更新」：启动后异步查询 GitHub 最新 Release，发现新版本时标签变为「🆕 新版本 vX.X.X → 下载」，点击跳转到下载页面
+
 ## [1.0.1] - 2026-07-07
 
 ### Added

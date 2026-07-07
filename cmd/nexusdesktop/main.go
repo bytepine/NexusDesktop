@@ -56,6 +56,7 @@ func main() {
 
 	// 创建托盘控制器（设置窗口懒创建，避免启动时 app.NewWindow() 触发 Dock 图标）
 	tray := ui.NewTrayController(fyneApp, mgr)
+	tray.AppVersion = appVersion
 
 	// 双击托盘图标打开设置窗口
 	// （Fyne 托盘双击事件通过菜单设置项替代，此处为占位说明）

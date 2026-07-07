@@ -30,6 +30,10 @@ type TrayController struct {
 	OnToggleServer     func(enabled bool)
 	OnRefreshInstances func()
 
+	// 版本信息：由 main 注入当前版本，检查更新后写入结果
+	AppVersion  string
+	updateState UpdateState
+
 	deskApp desktop.App
 	menu    *fyne.Menu
 }
@@ -63,6 +67,12 @@ func (tc *TrayController) Setup() {
 	}
 	tc.rebuildMenu()
 	tc.updateIcon()
+
+	// 启动后异步检查更新，完成后刷新菜单
+	CheckUpdate(tc.AppVersion, func(state UpdateState) {
+		tc.updateState = state
+		tc.Refresh()
+	})
 }
 
 // Refresh 重建托盘菜单（连接状态/实例列表变化后调用）。
@@ -184,6 +194,18 @@ func (tc *TrayController) rebuildMenu() {
 		}
 	})
 
+	// 「检查更新」：有新版本时标签变更，点击跳转下载页
+	var updateLabel string
+	switch {
+	case tc.updateState.HasUpdate:
+		updateLabel = fmt.Sprintf("🆕 新版本 v%s → 下载", tc.updateState.LatestVersion)
+	default:
+		updateLabel = "检查更新"
+	}
+	updateItem := fyne.NewMenuItem(updateLabel, func() {
+		openURL(releasesURL)
+	})
+
 	quitItem := fyne.NewMenuItem("退出", func() {
 		tc.app.Quit()
 	})
@@ -202,6 +224,7 @@ func (tc *TrayController) rebuildMenu() {
 		openLogs,
 		autostartItem,
 		fyne.NewMenuItemSeparator(),
+		updateItem,
 		quitItem,
 	}
 	tc.menu = fyne.NewMenu("NexusDesktop", menuItems...)
@@ -214,6 +237,20 @@ func (tc *TrayController) updateIcon() {
 	} else {
 		tc.deskApp.SetSystemTrayIcon(theme.InfoIcon()) // 未连接，待机
 	}
+}
+
+// openURL 用系统默认浏览器打开 URL。
+func openURL(url string) {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+	case "darwin":
+		cmd = exec.Command("open", url)
+	default:
+		cmd = exec.Command("xdg-open", url)
+	}
+	_ = cmd.Start()
 }
 
 // openDirectory 用系统默认文件管理器打开目录。
