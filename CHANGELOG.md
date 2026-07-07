@@ -5,6 +5,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-07-07
+
 ### Changed
 - 托盘「复制 MCP 客户端配置」改为「MCP 客户端配置…」：点击后弹出配置窗口，展示 Streamable HTTP / SSE 两种配置片段，点击「复制」一键写入剪贴板（参考 NexusRider 设置面板交互）
 
