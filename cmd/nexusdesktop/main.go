@@ -12,8 +12,10 @@ import (
 	"sync"
 	"time"
 
+	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 
+	"github.com/bytepine/NexusDesktop/assets"
 	"github.com/bytepine/NexusDesktop/internal/config"
 	nlog "github.com/bytepine/NexusDesktop/internal/log"
 	"github.com/bytepine/NexusDesktop/internal/mcp"
@@ -43,7 +45,8 @@ func main() {
 
 	// Fyne 应用（主 UI 入口）
 	fyneApp := app.NewWithID("com.bytepine.nexusdesktop")
-	fyneApp.SetIcon(nil) // 使用 Fyne 内置图标
+	appIcon := fyne.NewStaticResource("icon.png", assets.IconPNG)
+	fyneApp.SetIcon(appIcon)
 
 	// 创建设置窗口（初始隐藏）
 	settingsWin := ui.NewSettingsWindow(fyneApp, mgr)
