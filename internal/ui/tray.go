@@ -199,7 +199,11 @@ func (tc *TrayController) rebuildMenu() {
 }
 
 func (tc *TrayController) updateIcon() {
-	tc.deskApp.SetSystemTrayIcon(theme.ComputerIcon())
+	if tc.manager.Snapshot().WsOpen {
+		tc.deskApp.SetSystemTrayIcon(theme.ComputerIcon()) // 已连接 UE
+	} else {
+		tc.deskApp.SetSystemTrayIcon(theme.InfoIcon()) // 未连接，待机
+	}
 }
 
 // openDirectory 用系统默认文件管理器打开目录。
