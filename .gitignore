@@ -1,0 +1,15 @@
+# Build outputs
+*.exe
+*.app
+dist/
+
+# Go
+vendor/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# macOS
+.DS_Store
