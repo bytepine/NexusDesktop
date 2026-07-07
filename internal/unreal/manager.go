@@ -85,6 +85,26 @@ type Manager struct {
 	OnInstancesChanged   func() // 实例列表内容发生变化时触发
 }
 
+// StateSnapshot 是 Manager 当前状态的只读快照，供 UI 安全读取。
+type StateSnapshot struct {
+	Instances     []InstanceInfo
+	ConnectedPort int
+	WsOpen        bool
+}
+
+// Snapshot 在锁保护下返回当前状态快照，UI 层必须通过此方法读取，禁止直接访问字段。
+func (m *Manager) Snapshot() StateSnapshot {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	cp := make([]InstanceInfo, len(m.Instances))
+	copy(cp, m.Instances)
+	return StateSnapshot{
+		Instances:     cp,
+		ConnectedPort: m.ConnectedPort,
+		WsOpen:        m.isWsOpen(),
+	}
+}
+
 // NewManager 创建并返回一个 Manager，使用默认扫描范围。
 func NewManager() *Manager {
 	m := &Manager{

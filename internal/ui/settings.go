@@ -75,9 +75,10 @@ func (sw *SettingsWindow) buildContent() {
 	scanIntervalEntry.SetPlaceHolder("默认 5")
 
 	// ---- 已发现实例列表 ----
-	instances := sw.manager.Instances
-	connPort := sw.manager.ConnectedPort
-	wsOpen := sw.manager.IsWsOpen()
+	snap := sw.manager.Snapshot()
+	instances := snap.Instances
+	connPort := snap.ConnectedPort
+	wsOpen := snap.WsOpen
 
 	instanceRows := []fyne.CanvasObject{
 		widget.NewLabelWithStyle("已发现 UE 实例", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),

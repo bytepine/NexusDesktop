@@ -66,14 +66,14 @@ func (tc *TrayController) Refresh() {
 
 func (tc *TrayController) rebuildMenu() {
 	cfg := config.Get()
-	connPort := tc.manager.ConnectedPort
-	wsOpen := tc.manager.IsWsOpen()
+	snap := tc.manager.Snapshot()
+	connPort := snap.ConnectedPort
+	wsOpen := snap.WsOpen
 
 	// 顶部状态行
 	var statusLabel string
 	if wsOpen && connPort > 0 {
-		// 找到已连接实例的项目名
-		for _, inst := range tc.manager.Instances {
+		for _, inst := range snap.Instances {
 			if inst.Port == connPort {
 				statusLabel = fmt.Sprintf("已连接：%s (:%d)", inst.ProjectName, connPort)
 				break
@@ -87,7 +87,7 @@ func (tc *TrayController) rebuildMenu() {
 	}
 
 	// 实例子菜单
-	instances := tc.manager.Instances
+	instances := snap.Instances
 	var instanceItems []*fyne.MenuItem
 	for _, inst := range instances {
 		inst := inst // 捕获
@@ -184,7 +184,7 @@ func (tc *TrayController) rebuildMenu() {
 }
 
 func (tc *TrayController) updateIcon() {
-	if tc.manager.IsWsOpen() {
+	if tc.manager.Snapshot().WsOpen {
 		tc.deskApp.SetSystemTrayIcon(theme.ComputerIcon())
 	} else {
 		tc.deskApp.SetSystemTrayIcon(theme.InfoIcon())
