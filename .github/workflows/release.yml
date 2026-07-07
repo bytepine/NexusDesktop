@@ -29,20 +29,15 @@ jobs:
           go-version: "1.24.x"
 
       - name: Build Windows exe
-        env:
-          CGO_ENABLED: "1"
         run: |
           $version = "${{ github.ref_name }}".Replace("nexus-desktop-v", "")
-          go build `
-            -ldflags "-H=windowsgui -s -w -X main.appVersion=$version" `
-            -o "NexusDesktop-windows-amd64.exe" `
-            ./cmd/nexusdesktop/
+          python scripts/build_desktop.py --version $version --output release
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: windows-exe
-          path: NexusDesktop-windows-amd64.exe
+          path: release/NexusDesktop-windows-amd64.exe
 
   build-macos:
     name: Build macOS
@@ -58,40 +53,16 @@ jobs:
         run: go install fyne.io/fyne/v2/cmd/fyne@latest
 
       - name: Build macOS app
-        env:
-          CGO_ENABLED: "1"
         run: |
           version="${{ github.ref_name }}"
           version="${version#nexus-desktop-v}"
-          go build \
-            -ldflags "-s -w -X main.appVersion=$version" \
-            -o NexusDesktop \
-            ./cmd/nexusdesktop/
-          # 打包为 .app bundle（不含签名，用户需在系统偏好设置允许）
-          mkdir -p NexusDesktop.app/Contents/MacOS
-          mkdir -p NexusDesktop.app/Contents/Resources
-          cp NexusDesktop NexusDesktop.app/Contents/MacOS/
-          cat > NexusDesktop.app/Contents/Info.plist << 'EOF'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>CFBundleExecutable</key><string>NexusDesktop</string>
-            <key>CFBundleIdentifier</key><string>com.bytepine.nexusdesktop</string>
-            <key>CFBundleName</key><string>NexusDesktop</string>
-            <key>CFBundleVersion</key><string>${version}</string>
-            <key>LSUIElement</key><true/>
-            <key>NSHighResolutionCapable</key><true/>
-          </dict>
-          </plist>
-          EOF
-          zip -r NexusDesktop-darwin-arm64.app.zip NexusDesktop.app
+          python3 scripts/build_desktop.py --version "$version" --output release
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
           name: macos-app
-          path: NexusDesktop-darwin-arm64.app.zip
+          path: release/NexusDesktop-darwin-*.app.zip
 
   release:
     name: Create GitHub Release
@@ -101,23 +72,13 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Extract release notes
-        id: notes
         run: |
           version="${{ github.ref_name }}"
           version="${version#nexus-desktop-v}"
-          # 提取 CHANGELOG.md 中对应版本的段落
-          python3 - <<'EOF'
-          import re, sys
-          version = "${{ github.ref_name }}".replace("nexus-desktop-v", "")
-          with open("CHANGELOG.md") as f:
-              content = f.read()
-          # 匹配 [version] 段落到下一个 ## 之前
-          pattern = rf"## \[{re.escape(version)}\].*?(?=\n## |\Z)"
-          m = re.search(pattern, content, re.DOTALL)
-          notes = m.group(0).strip() if m else f"Release {version}"
-          with open("release_notes.md", "w") as f:
-              f.write(notes)
-          EOF
+          python3 scripts/extract_release_notes.py \
+            --version "$version" \
+            --output release_notes.md \
+            --verify
 
       - name: Download artifacts
         uses: actions/download-artifact@v4
@@ -130,4 +91,4 @@ jobs:
           body_path: release_notes.md
           files: |
             NexusDesktop-windows-amd64.exe
-            NexusDesktop-darwin-arm64.app.zip
+            NexusDesktop-darwin-*.app.zip

@@ -21,7 +21,8 @@ import (
 	"github.com/bytepine/NexusDesktop/internal/unreal"
 )
 
-const appVersion = "0.1.0"
+// appVersion 由构建脚本通过 -X main.appVersion=<ver> 注入；默认 dev。
+var appVersion = "dev"
 
 func main() {
 	// 单实例锁：第二个实例直接退出
