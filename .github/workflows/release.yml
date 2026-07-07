@@ -13,7 +13,7 @@ jobs:
     name: Build Windows
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # w64devkit v1.x 提供 GCC 14（标准 COFF，Go CGO 兼容）
       # GCC 16+ (binutils 2.46+) 默认 BigOBJ 格式，与 Go CGO 不兼容
@@ -24,7 +24,7 @@ jobs:
           Expand-Archive "w64devkit.zip" -DestinationPath "C:\w64devkit"
           echo "C:\w64devkit\w64devkit\bin" >> $env:GITHUB_PATH
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: "1.24.x"
 
@@ -37,18 +37,18 @@ jobs:
           python scripts/build_desktop.py --version $version --output release --build-type release
 
       - name: Upload Windows artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: windows-exe
           path: release/NexusDesktop-windows-amd64.exe
 
   build-macos:
     name: Build macOS
-    runs-on: macos-latest
+    runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: "1.24.x"
 
@@ -59,7 +59,7 @@ jobs:
           python3 scripts/build_desktop.py --version "$version" --output release --build-type release --arch universal
 
       - name: Upload macOS artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: macos-dmg
           path: release/NexusDesktop-darwin-universal.dmg
@@ -69,7 +69,7 @@ jobs:
     needs: [build-windows, build-macos]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Extract release notes
         run: |
@@ -81,12 +81,12 @@ jobs:
             --verify
 
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           merge-multiple: true
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           body_path: release_notes.md
           files: |
