@@ -15,25 +15,41 @@ if %ERRORLEVEL% equ 0 goto go_ok
 
 if defined GOROOT (
     if exist "%GOROOT%\bin\go.exe" (
-        set PATH=%GOROOT%\bin;%PATH%
+        set "PATH=%GOROOT%\bin;%PATH%"
         goto go_ok
     )
 )
-if exist "C:\tools\go\bin\go.exe"                            set PATH=C:\tools\go\bin;%PATH%                            & goto go_ok
-if exist "C:\Go\bin\go.exe"                                  set PATH=C:\Go\bin;%PATH%                                  & goto go_ok
-if exist "C:\Program Files\Go\bin\go.exe"                    set PATH=C:\Program Files\Go\bin;%PATH%                    & goto go_ok
-if exist "%USERPROFILE%\go\bin\go.exe"                       set PATH=%USERPROFILE%\go\bin;%PATH%                       & goto go_ok
-if exist "%LOCALAPPDATA%\Programs\Go\bin\go.exe"             set PATH=%LOCALAPPDATA%\Programs\Go\bin;%PATH%             & goto go_ok
+if exist "C:\tools\go\bin\go.exe" (
+    set "PATH=C:\tools\go\bin;%PATH%"
+    goto go_ok
+)
+if exist "C:\Go\bin\go.exe" (
+    set "PATH=C:\Go\bin;%PATH%"
+    goto go_ok
+)
+if exist "C:\Program Files\Go\bin\go.exe" (
+    set "PATH=C:\Program Files\Go\bin;%PATH%"
+    goto go_ok
+)
+if exist "%USERPROFILE%\go\bin\go.exe" (
+    set "PATH=%USERPROFILE%\go\bin;%PATH%"
+    goto go_ok
+)
+if exist "%LOCALAPPDATA%\Programs\Go\bin\go.exe" (
+    set "PATH=%LOCALAPPDATA%\Programs\Go\bin;%PATH%"
+    goto go_ok
+)
 
 echo [ERROR] 找不到 go 命令。
 echo         请安装 Go 1.24+：https://go.dev/dl/
 pause
 exit /b 1
+
 :go_ok
 
 :: ── 1. 读取当前版本，自动派生 beta 版本号 ────────────────
 set /p CURRENT_VERSION=<VERSION
-set CURRENT_VERSION=%CURRENT_VERSION: =%
+set "CURRENT_VERSION=%CURRENT_VERSION: =%"
 echo Current VERSION : %CURRENT_VERSION%
 
 for /f "tokens=1,2,3 delims=." %%a in ("%CURRENT_VERSION%") do (
@@ -43,7 +59,7 @@ for /f "tokens=1,2,3 delims=." %%a in ("%CURRENT_VERSION%") do (
 )
 for /f "tokens=1 delims=-" %%x in ("%PATCH%") do set PATCH=%%x
 set /a NEXT_PATCH=%PATCH%+1
-set NEXT_VERSION=%MAJOR%.%MINOR%.%NEXT_PATCH%-beta
+set "NEXT_VERSION=%MAJOR%.%MINOR%.%NEXT_PATCH%-beta"
 
 echo Next beta version: %NEXT_VERSION%
 echo.
@@ -54,15 +70,31 @@ if %ERRORLEVEL% equ 0 goto gcc_ok
 
 if defined W64DEVKIT (
     if exist "%W64DEVKIT%\bin\gcc.exe" (
-        set PATH=%W64DEVKIT%\bin;%PATH%
+        set "PATH=%W64DEVKIT%\bin;%PATH%"
         echo [GCC] %W64DEVKIT%\bin
         goto gcc_ok
     )
 )
-if exist "C:\tools\w64devkit-old\w64devkit\bin\gcc.exe"     set GCC_BIN=C:\tools\w64devkit-old\w64devkit\bin     & goto gcc_set
-if exist "C:\w64devkit\w64devkit\bin\gcc.exe"               set GCC_BIN=C:\w64devkit\w64devkit\bin               & goto gcc_set
-if exist "C:\tools\w64devkit\bin\gcc.exe"                   set GCC_BIN=C:\tools\w64devkit\bin                   & goto gcc_set
-if exist "C:\w64devkit\bin\gcc.exe"                         set GCC_BIN=C:\w64devkit\bin                         & goto gcc_set
+if exist "C:\tools\w64devkit-old\w64devkit\bin\gcc.exe" (
+    set "PATH=C:\tools\w64devkit-old\w64devkit\bin;%PATH%"
+    echo [GCC] C:\tools\w64devkit-old\w64devkit\bin
+    goto gcc_ok
+)
+if exist "C:\w64devkit\w64devkit\bin\gcc.exe" (
+    set "PATH=C:\w64devkit\w64devkit\bin;%PATH%"
+    echo [GCC] C:\w64devkit\w64devkit\bin
+    goto gcc_ok
+)
+if exist "C:\tools\w64devkit\bin\gcc.exe" (
+    set "PATH=C:\tools\w64devkit\bin;%PATH%"
+    echo [GCC] C:\tools\w64devkit\bin
+    goto gcc_ok
+)
+if exist "C:\w64devkit\bin\gcc.exe" (
+    set "PATH=C:\w64devkit\bin;%PATH%"
+    echo [GCC] C:\w64devkit\bin
+    goto gcc_ok
+)
 
 echo [WARN] 未找到 GCC！
 echo        请安装 w64devkit v1.23.0 (GCC 14)：
@@ -70,13 +102,13 @@ echo        https://github.com/skeeto/w64devkit/releases/tag/v1.23.0
 pause
 exit /b 1
 
-:gcc_set
-set PATH=%GCC_BIN%;%PATH%
-echo [GCC] %GCC_BIN%
 :gcc_ok
+echo.
 
 :: ── 3. 调用 Python 打包脚本 ──────────────────────────────
 echo [1/2] Building NexusDesktop (version: %NEXT_VERSION%)...
+echo       (首次构建需下载依赖，约需 1-5 分钟，请耐心等待...)
+echo.
 python scripts\build_desktop.py --version %NEXT_VERSION%
 if %ERRORLEVEL% neq 0 (
     echo.

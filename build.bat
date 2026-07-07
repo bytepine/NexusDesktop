@@ -15,26 +15,45 @@ if %ERRORLEVEL% equ 0 goto go_ok
 
 if defined GOROOT (
     if exist "%GOROOT%\bin\go.exe" (
-        set PATH=%GOROOT%\bin;%PATH%
+        set "PATH=%GOROOT%\bin;%PATH%"
         goto go_ok
     )
 )
-if exist "C:\tools\go\bin\go.exe"                            set PATH=C:\tools\go\bin;%PATH%                            & goto go_ok
-if exist "C:\Go\bin\go.exe"                                  set PATH=C:\Go\bin;%PATH%                                  & goto go_ok
-if exist "C:\Program Files\Go\bin\go.exe"                    set PATH=C:\Program Files\Go\bin;%PATH%                    & goto go_ok
-if exist "%USERPROFILE%\go\bin\go.exe"                       set PATH=%USERPROFILE%\go\bin;%PATH%                       & goto go_ok
-if exist "%LOCALAPPDATA%\Programs\Go\bin\go.exe"             set PATH=%LOCALAPPDATA%\Programs\Go\bin;%PATH%             & goto go_ok
+if exist "C:\tools\go\bin\go.exe" (
+    set "PATH=C:\tools\go\bin;%PATH%"
+    goto go_ok
+)
+if exist "C:\Go\bin\go.exe" (
+    set "PATH=C:\Go\bin;%PATH%"
+    goto go_ok
+)
+if exist "C:\Program Files\Go\bin\go.exe" (
+    set "PATH=C:\Program Files\Go\bin;%PATH%"
+    goto go_ok
+)
+if exist "%USERPROFILE%\go\bin\go.exe" (
+    set "PATH=%USERPROFILE%\go\bin;%PATH%"
+    goto go_ok
+)
+if exist "%LOCALAPPDATA%\Programs\Go\bin\go.exe" (
+    set "PATH=%LOCALAPPDATA%\Programs\Go\bin;%PATH%"
+    goto go_ok
+)
 
 echo [ERROR] 找不到 go 命令。
 echo         请安装 Go 1.24+：https://go.dev/dl/
 echo         或将 Go\bin 路径加入系统 PATH。
 pause
 exit /b 1
+
 :go_ok
+echo [Go] %PATH:~0,0%%GOROOT% (from PATH)
+for /f "tokens=*" %%v in ('go version 2^>nul') do echo [Go] %%v
+echo.
 
 :: ── 1. 读取当前版本 ──────────────────────────────────────
 set /p VERSION=<VERSION
-set VERSION=%VERSION: =%
+set "VERSION=%VERSION: =%"
 echo Version: %VERSION%
 echo.
 
@@ -44,15 +63,31 @@ if %ERRORLEVEL% equ 0 goto gcc_ok
 
 if defined W64DEVKIT (
     if exist "%W64DEVKIT%\bin\gcc.exe" (
-        set PATH=%W64DEVKIT%\bin;%PATH%
+        set "PATH=%W64DEVKIT%\bin;%PATH%"
         echo [GCC] %W64DEVKIT%\bin
         goto gcc_ok
     )
 )
-if exist "C:\tools\w64devkit-old\w64devkit\bin\gcc.exe"     set GCC_BIN=C:\tools\w64devkit-old\w64devkit\bin     & goto gcc_set
-if exist "C:\w64devkit\w64devkit\bin\gcc.exe"               set GCC_BIN=C:\w64devkit\w64devkit\bin               & goto gcc_set
-if exist "C:\tools\w64devkit\bin\gcc.exe"                   set GCC_BIN=C:\tools\w64devkit\bin                   & goto gcc_set
-if exist "C:\w64devkit\bin\gcc.exe"                         set GCC_BIN=C:\w64devkit\bin                         & goto gcc_set
+if exist "C:\tools\w64devkit-old\w64devkit\bin\gcc.exe" (
+    set "PATH=C:\tools\w64devkit-old\w64devkit\bin;%PATH%"
+    echo [GCC] C:\tools\w64devkit-old\w64devkit\bin
+    goto gcc_ok
+)
+if exist "C:\w64devkit\w64devkit\bin\gcc.exe" (
+    set "PATH=C:\w64devkit\w64devkit\bin;%PATH%"
+    echo [GCC] C:\w64devkit\w64devkit\bin
+    goto gcc_ok
+)
+if exist "C:\tools\w64devkit\bin\gcc.exe" (
+    set "PATH=C:\tools\w64devkit\bin;%PATH%"
+    echo [GCC] C:\tools\w64devkit\bin
+    goto gcc_ok
+)
+if exist "C:\w64devkit\bin\gcc.exe" (
+    set "PATH=C:\w64devkit\bin;%PATH%"
+    echo [GCC] C:\w64devkit\bin
+    goto gcc_ok
+)
 
 echo [WARN] 未找到 GCC！Fyne 需要 CGO。
 echo        请安装 w64devkit v1.23.0 (GCC 14)：
@@ -62,13 +97,13 @@ echo.
 pause
 exit /b 1
 
-:gcc_set
-set PATH=%GCC_BIN%;%PATH%
-echo [GCC] %GCC_BIN%
 :gcc_ok
+echo.
 
 :: ── 3. 调用 Python 打包脚本 ──────────────────────────────
 echo [1/2] Building NexusDesktop (version: %VERSION%)...
+echo       (首次构建需下载依赖，约需 1-5 分钟，请耐心等待...)
+echo.
 python scripts\build_desktop.py --version %VERSION%
 if %ERRORLEVEL% neq 0 (
     echo.
