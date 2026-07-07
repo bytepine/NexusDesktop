@@ -25,6 +25,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Changed
 - MCP HTTP 默认端口从 6900 改为 6700
 - 默认启用中转服务器（`Enabled` 默认值改为 `true`）
+- 托盘图标改用 Fyne 内置图标并区分连接状态：已连接显示 `ComputerIcon`，未连接显示 `InfoIcon`
 
 ## [1.0.0] - 2026-07-07
 
