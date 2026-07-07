@@ -167,11 +167,19 @@ func (tc *TrayController) rebuildMenu() {
 	})
 	disconnectItem.Disabled = !wsOpen
 
+	// 「扫描实例」主动触发一次发现
+	scanItem := fyne.NewMenuItem("扫描 UE 实例", func() {
+		if tc.OnRefreshInstances != nil {
+			tc.OnRefreshInstances()
+		}
+	})
+
 	menuItems := []*fyne.MenuItem{
 		fyne.NewMenuItem(statusLabel, nil),
 		fyne.NewMenuItemSeparator(),
 		serverToggle,
 		instancesMenu,
+		scanItem,
 		disconnectItem,
 		fyne.NewMenuItemSeparator(),
 		copyConfig,
