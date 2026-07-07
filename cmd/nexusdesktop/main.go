@@ -48,15 +48,20 @@ func main() {
 	appIcon := fyne.NewStaticResource("icon.png", assets.IconPNG)
 	fyneApp.SetIcon(appIcon)
 
+	// 创建托盘控制器（设置窗口懒创建，避免启动时 app.NewWindow() 触发 Dock 图标）
+	var tray *ui.TrayController
+	tray = ui.NewTrayController(fyneApp, mgr)
+	tray.AppVersion = appVersion
+
 	// macOS：在事件循环就绪（applicationDidFinishLaunching: 之后）再压一次 Accessory 策略，
 	// 覆盖 Fyne driver 默认设置的 Regular 策略，确保 Dock 不出现图标。
+	// 同时触发一次检查更新（事件循环已就绪，goroutine 回调可安全刷新托盘菜单）。
 	fyneApp.Lifecycle().SetOnStarted(func() {
 		ui.SuppressDockIcon()
+		ui.CheckUpdate(appVersion, func(state ui.UpdateState) {
+			tray.SetUpdateState(state)
+		})
 	})
-
-	// 创建托盘控制器（设置窗口懒创建，避免启动时 app.NewWindow() 触发 Dock 图标）
-	tray := ui.NewTrayController(fyneApp, mgr)
-	tray.AppVersion = appVersion
 
 	// 双击托盘图标打开设置窗口
 	// （Fyne 托盘双击事件通过菜单设置项替代，此处为占位说明）

@@ -59,6 +59,12 @@ func (tc *TrayController) openSettings() {
 	tc.settings.Show()
 }
 
+// SetUpdateState 更新检查结果写入后刷新菜单，供外部（main）在事件循环就绪后调用。
+func (tc *TrayController) SetUpdateState(state UpdateState) {
+	tc.updateState = state
+	tc.Refresh()
+}
+
 // Setup 初始化托盘图标与菜单，需在 Fyne 事件循环启动后调用。
 func (tc *TrayController) Setup() {
 	if tc.deskApp == nil {
@@ -67,12 +73,6 @@ func (tc *TrayController) Setup() {
 	}
 	tc.rebuildMenu()
 	tc.updateIcon()
-
-	// 启动后异步检查更新，完成后刷新菜单
-	CheckUpdate(tc.AppVersion, func(state UpdateState) {
-		tc.updateState = state
-		tc.Refresh()
-	})
 }
 
 // Refresh 重建托盘菜单（连接状态/实例列表变化后调用）。
