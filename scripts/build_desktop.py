@@ -142,6 +142,74 @@ def _prepend_w64devkit(env: dict) -> None:
 _LOG_PKG = "github.com/bytepine/NexusDesktop/internal/log"
 
 
+def _create_ico(png_path: str, ico_path: str) -> bool:
+    """将 PNG 封装为 ICO（嵌入原始 PNG 数据，Windows Vista+ 原生支持）。纯 Python，无需 PIL。"""
+    import struct
+    try:
+        with open(png_path, "rb") as f:
+            png_data = f.read()
+        # ICO 头 + 1 条目目录 + PNG 数据
+        # 目录条目中 width/height=0 代表 256
+        data_offset = 6 + 16
+        header = struct.pack("<HHH", 0, 1, 1)
+        dir_entry = struct.pack("<BBBBHHII", 0, 0, 0, 0, 1, 32, len(png_data), data_offset)
+        with open(ico_path, "wb") as f:
+            f.write(header + dir_entry + png_data)
+        return True
+    except Exception as e:
+        print(f"[WARN] ICO 生成失败: {e}", file=sys.stderr)
+        return False
+
+
+def _embed_windows_icon(root: str, go: str, env: dict) -> str | None:
+    """
+    在 cmd/nexusdesktop/ 生成 resource.syso，将品牌图标嵌入 Windows exe。
+    返回 syso 路径（成功）或 None（失败，构建继续但无自定义图标）。
+    """
+    icon_png = os.path.join(root, "assets", "icon.png")
+    icon_ico = os.path.join(root, "assets", "icon.ico")
+    syso_path = os.path.join(root, "cmd", "nexusdesktop", "resource.syso")
+
+    if not os.path.isfile(icon_png):
+        print("[WARN] assets/icon.png 不存在，跳过图标嵌入", file=sys.stderr)
+        return None
+
+    # 1. PNG → ICO
+    if not _create_ico(icon_png, icon_ico):
+        return None
+    print(f"[icon] ICO 已生成: {icon_ico}")
+
+    # 2. 安装 rsrc（Go 工具，生成 .syso Windows 资源文件）
+    print("[icon] 安装 rsrc 工具...")
+    subprocess.run(
+        [go, "install", "github.com/akavel/rsrc@latest"],
+        env=env, check=False,
+    )
+
+    # 3. 查找 rsrc.exe（go install 放到 GOPATH/bin 或 GOENV bin）
+    gopath = subprocess.run(
+        [go, "env", "GOPATH"], env=env, capture_output=True, text=True
+    ).stdout.strip()
+    rsrc_exe = os.path.join(gopath, "bin", "rsrc.exe")
+    if not os.path.isfile(rsrc_exe):
+        rsrc_exe = shutil.which("rsrc") or ""
+    if not rsrc_exe or not os.path.isfile(rsrc_exe):
+        print("[WARN] rsrc 未找到，跳过图标嵌入", file=sys.stderr)
+        return None
+
+    # 4. 生成 resource.syso
+    result = subprocess.run(
+        [rsrc_exe, "-ico", icon_ico, "-o", syso_path],
+        env=env,
+    )
+    if result.returncode != 0 or not os.path.isfile(syso_path):
+        print("[WARN] rsrc 执行失败，跳过图标嵌入", file=sys.stderr)
+        return None
+
+    print(f"[icon] resource.syso 已生成: {syso_path}")
+    return syso_path
+
+
 def build_desktop(version: str, output_dir: str, build_type: str = "develop") -> str:
     """
     build_type: "develop" | "release"
@@ -200,23 +268,34 @@ def build_desktop(version: str, output_dir: str, build_type: str = "develop") ->
     os.makedirs(output_dir, exist_ok=True)
     out_path = os.path.join(output_dir, out_name)
 
-    cmd = [
-        go, "build",
-        "-ldflags", ldflags.strip(),
-        "-o", out_path,
-        "./cmd/nexusdesktop/",
-    ]
+    # Windows：嵌入品牌图标到 exe（生成临时 resource.syso）
+    syso_path: str | None = None
+    if system == "Windows":
+        syso_path = _embed_windows_icon(root, go, env)
 
-    build_env = env.copy()
-    build_env["GOOS"] = goos
-    build_env["GOARCH"] = goarch
+    try:
+        cmd = [
+            go, "build",
+            "-ldflags", ldflags.strip(),
+            "-o", out_path,
+            "./cmd/nexusdesktop/",
+        ]
 
-    print(f"[build] go build v{version} ({build_type}) → {out_path}")
-    print(f"        GOOS={goos} GOARCH={goarch} CGO_ENABLED=1 log.Level={log_level}")
+        build_env = env.copy()
+        build_env["GOOS"] = goos
+        build_env["GOARCH"] = goarch
 
-    result = subprocess.run(cmd, cwd=root, env=build_env)
-    if result.returncode != 0:
-        raise RuntimeError(f"go build 失败（返回码 {result.returncode}）")
+        print(f"[build] go build v{version} ({build_type}) → {out_path}")
+        print(f"        GOOS={goos} GOARCH={goarch} CGO_ENABLED=1 log.Level={log_level}")
+
+        result = subprocess.run(cmd, cwd=root, env=build_env)
+        if result.returncode != 0:
+            raise RuntimeError(f"go build 失败（返回码 {result.returncode}）")
+    finally:
+        # 清理临时 resource.syso（避免污染源码目录）
+        if syso_path and os.path.isfile(syso_path):
+            os.remove(syso_path)
+            print(f"[icon] 已清理: {syso_path}")
 
     size_mb = os.path.getsize(out_path) / (1024 * 1024)
     print(f"[build] 产物大小：{size_mb:.1f} MB")

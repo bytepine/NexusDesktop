@@ -28,6 +28,9 @@ jobs:
         with:
           go-version: "1.24.x"
 
+      - name: Install rsrc (Windows icon embedding)
+        run: go install github.com/akavel/rsrc@latest
+
       - name: Build Windows exe
         run: |
           $version = "${{ github.ref_name }}".Replace("nexus-desktop-v", "")

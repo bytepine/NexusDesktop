@@ -2,6 +2,11 @@
 *.exe
 *.app
 dist/
+release/
+
+# Generated icon / resource files (build-time intermediates)
+assets/icon.ico
+cmd/nexusdesktop/resource.syso
 
 # Go
 vendor/
