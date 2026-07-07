@@ -52,20 +52,17 @@ jobs:
         with:
           go-version: "1.24.x"
 
-      - name: Install Fyne CLI
-        run: go install fyne.io/fyne/v2/cmd/fyne@latest
-
-      - name: Build macOS app
+      - name: Build macOS Universal DMG
         run: |
           version="${{ github.ref_name }}"
           version="${version#nexus-desktop-v}"
-          python3 scripts/build_desktop.py --version "$version" --output release --build-type release
+          python3 scripts/build_desktop.py --version "$version" --output release --build-type release --arch universal
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
-          name: macos-app
-          path: release/NexusDesktop-darwin-*.app.zip
+          name: macos-dmg
+          path: release/NexusDesktop-darwin-universal.dmg
 
   release:
     name: Create GitHub Release
@@ -94,4 +91,4 @@ jobs:
           body_path: release_notes.md
           files: |
             NexusDesktop-windows-amd64.exe
-            NexusDesktop-darwin-*.app.zip
+            NexusDesktop-darwin-universal.dmg
