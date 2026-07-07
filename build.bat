@@ -9,6 +9,31 @@ echo.
 
 cd /d "%~dp0"
 
+:: ── 0. 确保 Go 在 PATH ────────────────────────────────────
+where go >nul 2>&1
+if %ERRORLEVEL% neq 0 (
+    :: 按优先级尝试常见安装路径
+    for %%d in (
+        "%GOROOT%\bin"
+        "C:\tools\go\bin"
+        "C:\Go\bin"
+        "C:\Program Files\Go\bin"
+        "%USERPROFILE%\go\bin"
+        "%LOCALAPPDATA%\Programs\Go\bin"
+    ) do (
+        if exist "%%~d\go.exe" (
+            set PATH=%%~d;%PATH%
+            goto go_ok
+        )
+    )
+    echo [ERROR] 找不到 go 命令。
+    echo         请安装 Go 1.24+：https://go.dev/dl/
+    echo         或将 Go\bin 路径加入系统 PATH。
+    pause
+    exit /b 1
+)
+:go_ok
+
 :: ── 1. 读取当前版本 ──────────────────────────────────────
 set /p VERSION=<VERSION
 set VERSION=%VERSION: =%

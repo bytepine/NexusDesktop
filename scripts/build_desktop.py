@@ -48,18 +48,48 @@ def read_version(root: str) -> str:
 
 
 def find_go() -> str:
-    """返回 go 可执行路径；优先环境变量 GOROOT，其次 PATH。"""
+    """返回 go 可执行路径；优先 GOROOT，其次 PATH，最后探测常见安装目录。"""
+    exe_name = "go.exe" if sys.platform == "win32" else "go"
+
     goroot = os.environ.get("GOROOT")
     if goroot:
-        exe = os.path.join(goroot, "bin", "go.exe" if sys.platform == "win32" else "go")
+        exe = os.path.join(goroot, "bin", exe_name)
         if os.path.isfile(exe):
             return exe
+
     found = shutil.which("go")
     if found:
         return found
+
+    if sys.platform == "win32":
+        home = os.environ.get("USERPROFILE", "")
+        local = os.environ.get("LOCALAPPDATA", "")
+        candidates = [
+            r"C:\tools\go\bin",
+            r"C:\Go\bin",
+            r"C:\Program Files\Go\bin",
+            os.path.join(home, "go", "bin"),
+            os.path.join(local, "Programs", "Go", "bin"),
+        ]
+    else:
+        home = os.path.expanduser("~")
+        candidates = [
+            "/usr/local/go/bin",
+            "/usr/local/bin",
+            os.path.join(home, "go", "bin"),
+            os.path.join(home, ".local", "go", "bin"),
+        ]
+
+    for d in candidates:
+        exe = os.path.join(d, exe_name)
+        if os.path.isfile(exe):
+            # 将该目录加入 PATH，后续子进程也能找到
+            os.environ["PATH"] = d + os.pathsep + os.environ.get("PATH", "")
+            return exe
+
     raise FileNotFoundError(
-        "找不到 go 命令。请安装 Go 1.24+ 并将其加入 PATH，"
-        "或设置 GOROOT 环境变量。"
+        "找不到 go 命令。请安装 Go 1.24+：https://go.dev/dl/\n"
+        "或设置 GOROOT 环境变量指向 Go 安装目录。"
     )
 
 

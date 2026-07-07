@@ -9,6 +9,29 @@ echo.
 
 cd /d "%~dp0"
 
+:: ── 0. 确保 Go 在 PATH ────────────────────────────────────
+where go >nul 2>&1
+if %ERRORLEVEL% neq 0 (
+    for %%d in (
+        "%GOROOT%\bin"
+        "C:\tools\go\bin"
+        "C:\Go\bin"
+        "C:\Program Files\Go\bin"
+        "%USERPROFILE%\go\bin"
+        "%LOCALAPPDATA%\Programs\Go\bin"
+    ) do (
+        if exist "%%~d\go.exe" (
+            set PATH=%%~d;%PATH%
+            goto go_ok
+        )
+    )
+    echo [ERROR] 找不到 go 命令。
+    echo         请安装 Go 1.24+：https://go.dev/dl/
+    pause
+    exit /b 1
+)
+:go_ok
+
 :: ── 1. 读取当前版本，自动派生 beta 版本号 ────────────────
 set /p CURRENT_VERSION=<VERSION
 set CURRENT_VERSION=%CURRENT_VERSION: =%
