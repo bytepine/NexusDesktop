@@ -39,8 +39,8 @@ jobs:
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v7
         with:
-          name: windows-exe
-          path: release/NexusDesktop-windows-amd64.exe
+          name: windows-zip
+          path: release/NexusDesktop-windows-amd64-v*.zip
 
   build-macos:
     name: Build macOS
@@ -90,5 +90,5 @@ jobs:
         with:
           body_path: release_notes.md
           files: |
-            NexusDesktop-windows-amd64.exe
+            NexusDesktop-windows-amd64-v*.zip
             NexusDesktop-darwin-universal.dmg

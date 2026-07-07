@@ -10,13 +10,13 @@ build_desktop.py — NexusDesktop 跨平台构建脚本
         - 日志级别 debug（所有日志可见）
         - Windows 保留控制台窗口（便于查看实时日志）
         - 不裁剪符号（方便 panic 堆栈阅读）
-        - 产物名加 -dev 后缀，如 NexusDesktop-windows-amd64-dev.exe
+        - Windows 产物：NexusDesktop-windows-amd64-v<ver>-dev.zip（内含 NexusDesktop-dev.exe）
 
     release
         - 日志级别 info（debug 日志不输出）
         - Windows 隐藏控制台窗口（-H=windowsgui）
         - -s -w 裁剪符号，减小体积
-        - 产物名不带后缀，如 NexusDesktop-windows-amd64.exe
+        - Windows 产物：NexusDesktop-windows-amd64-v<ver>.zip（内含 NexusDesktop.exe）
 
 平台要求：
     Windows : GCC 14.x（如 w64devkit v1.23.0）。
@@ -269,27 +269,37 @@ def build_desktop(
     os.makedirs(output_dir, exist_ok=True)
 
     if system == "Windows":
+        import zipfile
         _prepend_w64devkit(env)
         arch = "amd64"
-        suffix = "" if is_release else "-dev"
-        out_name = f"NexusDesktop-windows-{arch}{suffix}.exe"
+        # exe 固定名称（不含版本号）
+        exe_name = "NexusDesktop.exe" if is_release else "NexusDesktop-dev.exe"
         win_flags = "-H=windowsgui " if is_release else ""
         ldflags = (
             f"{win_flags}{strip_flags}"
             f"-X main.appVersion={version} "
             f"-X {_LOG_PKG}.Level={log_level}"
         )
-        out_path = os.path.join(output_dir, out_name)
+        exe_path = os.path.join(output_dir, exe_name)
         syso_path = _embed_windows_icon(root, go, env)
         try:
-            _go_build_binary(go, env, root, "windows", arch, out_path, ldflags)
+            _go_build_binary(go, env, root, "windows", arch, exe_path, ldflags)
         finally:
             if syso_path and os.path.isfile(syso_path):
                 os.remove(syso_path)
                 print(f"[icon] 已清理: {syso_path}")
-        size_mb = os.path.getsize(out_path) / (1024 * 1024)
+        size_mb = os.path.getsize(exe_path) / (1024 * 1024)
         print(f"[build] 产物大小：{size_mb:.1f} MB")
-        return out_path
+        # 打包 zip：版本号写在 zip 文件名中，exe 保持固定名称
+        suffix = "" if is_release else "-dev"
+        zip_name = f"NexusDesktop-windows-{arch}-v{version}{suffix}.zip"
+        zip_path = os.path.join(output_dir, zip_name)
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.write(exe_path, exe_name)
+        os.remove(exe_path)
+        zip_mb = os.path.getsize(zip_path) / (1024 * 1024)
+        print(f"[build] ZIP 产物：{zip_mb:.1f} MB → {zip_path}")
+        return zip_path
 
     elif system == "Darwin":
         suffix = "" if is_release else "-dev"

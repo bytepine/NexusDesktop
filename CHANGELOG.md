@@ -7,6 +7,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 - 托盘菜单「检查更新」：启动后异步查询 GitHub 最新 Release，发现新版本时标签变为「🆕 新版本 vX.X.X → 下载」，点击跳转到下载页面
+- Windows 产物改为 ZIP 打包：zip 文件名含版本号（`NexusDesktop-windows-amd64-v<ver>.zip`），zip 内 exe 保持固定名称（`NexusDesktop.exe`）
 
 ## [1.0.1] - 2026-07-07
 
