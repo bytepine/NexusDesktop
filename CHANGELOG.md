@@ -5,8 +5,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- 构建脚本 `build.bat` / `build_beta.bat` / `build_release.bat` / `build.command` 一键跨平台打包
+- `build_desktop.py` 支持 `--build-type develop|release`，区分调试包与发布包
+- 日志系统完善：新增 `Debug`/`Debugf`、日志级别过滤（develop=debug / release=info）、时间戳精确到毫秒
+- MCP 层、WS 层、扫描层补充 Debug 级别日志
+- 托盘菜单新增「扫描 UE 实例」按钮，可主动触发一次端口扫描
+
+### Fixed
+- 打开菜单 1–2 秒后自动消失：改为仅在实例列表/连接状态变化时刷新菜单，定时器不再强制重建
+- 实例发现后菜单未更新：用 `Manager.Snapshot()` 消除 `Instances`/`ConnectedPort` 并发读写竞态
+- 启动时立即扫描移至 `tray.Setup()` 之后，确保托盘就绪再接受刷新回调
+- 构建脚本 `if exist ... & goto` 改为括号写法，修复双击 bat 闪退
+- 构建脚本自动探测 Go 安装路径（`C:\tools\go\bin` 等），无需手动配置 PATH
+- GitHub Actions CI 构建类型改为 `release`（info 日志 + `-H=windowsgui` + `-s -w`）
+- 托盘退出按钮重复（保留 Fyne 自动注入的 Quit，删除手写项）
+- `appVersion` 由 `const` 改为 `var`，支持链接器 `-X` 注入版本号
+
 ### Changed
 - MCP HTTP 默认端口从 6900 改为 6700
+- 默认启用中转服务器（`Enabled` 默认值改为 `true`）
 
 ## [1.0.0] - 2026-07-07
 
