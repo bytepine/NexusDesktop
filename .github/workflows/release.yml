@@ -31,7 +31,7 @@ jobs:
       - name: Build Windows exe
         run: |
           $version = "${{ github.ref_name }}".Replace("nexus-desktop-v", "")
-          python scripts/build_desktop.py --version $version --output release
+          python scripts/build_desktop.py --version $version --output release --build-type release
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
@@ -56,7 +56,7 @@ jobs:
         run: |
           version="${{ github.ref_name }}"
           version="${version#nexus-desktop-v}"
-          python3 scripts/build_desktop.py --version "$version" --output release
+          python3 scripts/build_desktop.py --version "$version" --output release --build-type release
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
