@@ -32,7 +32,7 @@ Comparison with IDE plugin alternatives:
 
 Get the latest release from [Releases](https://github.com/bytepine/NexusDesktop/releases):
 
-- **Windows**: `NexusDesktop-windows-amd64.exe` — no installer, double-click to run
+- **Windows**: `NexusDesktop-windows-amd64-v<version>.zip` — extract and double-click `NexusDesktop.exe`, no installer needed
 - **macOS**: `NexusDesktop-darwin-universal.dmg` — Universal Binary (Intel + Apple Silicon)
 
 ---
@@ -47,7 +47,7 @@ Get the latest release from [Releases](https://github.com/bytepine/NexusDesktop/
 
 ### 2. Launch NexusDesktop
 
-**Windows**: Double-click `NexusDesktop.exe` — the app enters the system tray.
+**Windows**: Extract the ZIP, then double-click `NexusDesktop.exe` — the app enters the system tray.
 
 **macOS**: Open `NexusDesktop-darwin-universal.dmg`, drag `NexusDesktop.app` into `Applications`, then launch it. The app does **not** appear in the Dock — it lives in the menu bar only.
 
@@ -57,8 +57,10 @@ Tray menu items:
 |------|-------------|
 | Status line | Shows current UE connection state (project name / disconnected) |
 | Select UE instance | Switch to a specific UE instance |
+| Scan UE instances | Manually trigger a port scan |
 | ✓ Enable proxy | Toggle MCP HTTP listener (default `:6700`) |
 | Copy MCP client config | Copy JSON snippet to clipboard |
+| Check for updates | Query latest Release; shows version and download link if a newer version is found |
 | Settings… | Open settings window |
 | Open log directory | Opens the log folder |
 | Launch on login | Toggle autostart |
@@ -121,7 +123,7 @@ AI Client ──POST /stream──► MCP HTTP Server (:6700)
 
 ### Prerequisites
 
-- Go 1.24+
+- Go 1.25+
 - GCC / MinGW-w64 (Windows) or Xcode CLI (macOS) — required by Fyne (CGO)
 
 ### Windows
