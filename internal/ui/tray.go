@@ -175,6 +175,11 @@ func (tc *TrayController) rebuildMenu() {
 		}
 	})
 
+	quitItem := fyne.NewMenuItem("退出", func() {
+		tc.app.Quit()
+	})
+	quitItem.IsQuit = true // 告知 Fyne 这是 Quit 项，阻止其再自动追加一个
+
 	menuItems := []*fyne.MenuItem{
 		fyne.NewMenuItem(statusLabel, nil),
 		fyne.NewMenuItemSeparator(),
@@ -187,6 +192,8 @@ func (tc *TrayController) rebuildMenu() {
 		settingsItem,
 		openLogs,
 		autostartItem,
+		fyne.NewMenuItemSeparator(),
+		quitItem,
 	}
 	tc.menu = fyne.NewMenu("NexusDesktop", menuItems...)
 	tc.deskApp.SetSystemTrayMenu(tc.menu)

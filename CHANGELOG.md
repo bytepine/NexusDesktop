@@ -19,7 +19,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - 构建脚本 `if exist ... & goto` 改为括号写法，修复双击 bat 闪退
 - 构建脚本自动探测 Go 安装路径（`C:\tools\go\bin` 等），无需手动配置 PATH
 - GitHub Actions CI 构建类型改为 `release`（info 日志 + `-H=windowsgui` + `-s -w`）
-- 托盘退出按钮重复（保留 Fyne 自动注入的 Quit，删除手写项）
+- 托盘退出按钮不稳定（0 个或 2 个）：改为手动添加并设置 `IsQuit=true`，阻止 Fyne 重复注入，始终保证恰好一个「退出」
 - `appVersion` 由 `const` 改为 `var`，支持链接器 `-X` 注入版本号
 
 ### Changed
