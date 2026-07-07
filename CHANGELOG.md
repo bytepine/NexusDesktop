@@ -5,6 +5,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed
+- MCP HTTP 默认端口从 6900 改为 6700
+
 ## [1.0.0] - 2026-07-07
 
 ### Added

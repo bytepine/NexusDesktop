@@ -18,7 +18,7 @@ const appDirName = "NexusDesktop"
 type Config struct {
 	// Enabled 是中转服务器总开关；false 时不监听 MCP 端口。
 	Enabled bool `json:"enabled"`
-	// HTTPPort 是 AI 客户端连接的 MCP HTTP 端口（默认 6900）。
+	// HTTPPort 是 AI 客户端连接的 MCP HTTP 端口（默认 6700）。
 	HTTPPort int `json:"httpPort"`
 	// ScanPortStart / ScanPortEnd 是 UE 实例扫描端口范围（默认 45000–45100）。
 	ScanPortStart int `json:"scanPortStart"`
@@ -31,7 +31,7 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		Enabled:             false,
-		HTTPPort:            6900,
+		HTTPPort:            6700,
 		ScanPortStart:       45000,
 		ScanPortEnd:         45100,
 		ScanIntervalSeconds: 5,
@@ -131,7 +131,7 @@ func OnChange(fn func(Config)) {
 // sanitize 将不合法的字段修正为合理值。
 func sanitize(c *Config) {
 	if c.HTTPPort < 1024 || c.HTTPPort > 65535 {
-		c.HTTPPort = 6900
+		c.HTTPPort = 6700
 	}
 	if c.ScanPortStart < 1024 || c.ScanPortStart > 65535 {
 		c.ScanPortStart = 45000

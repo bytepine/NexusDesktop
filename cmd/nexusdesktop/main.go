@@ -5,7 +5,7 @@
 // 启动后在系统托盘显示 UE 连接状态；AI 客户端经 MCP HTTP 服务器连接，
 // 服务器自动发现本地 UE 实例并经 WebSocket JSON-RPC 转发工具调用。
 //
-// 端点：http://127.0.0.1:6900/stream（端口可在设置窗口调整）
+// 端点：http://127.0.0.1:6700/stream（端口可在设置窗口调整）
 package main
 
 import (

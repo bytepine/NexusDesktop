@@ -60,7 +60,7 @@ func (sw *SettingsWindow) buildContent() {
 	// ---- 端口设置 ----
 	httpPortEntry := widget.NewEntry()
 	httpPortEntry.SetText(fmt.Sprintf("%d", cfg.HTTPPort))
-	httpPortEntry.SetPlaceHolder("默认 6900")
+	httpPortEntry.SetPlaceHolder("默认 6700")
 
 	scanStartEntry := widget.NewEntry()
 	scanStartEntry.SetText(fmt.Sprintf("%d", cfg.ScanPortStart))
