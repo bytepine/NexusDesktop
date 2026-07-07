@@ -198,7 +198,7 @@ func (tc *TrayController) rebuildMenu() {
 	var updateLabel string
 	switch {
 	case tc.updateState.HasUpdate:
-		updateLabel = fmt.Sprintf("🆕 新版本 v%s → 下载", tc.updateState.LatestVersion)
+		updateLabel = fmt.Sprintf("[新版本] v%s → 下载", tc.updateState.LatestVersion)
 	default:
 		updateLabel = "检查更新"
 	}
