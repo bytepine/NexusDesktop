@@ -142,16 +142,9 @@ func main() {
 					mu.Unlock()
 					if srvRunning {
 						mgr.MaintainConnection()
-						// 不在此处调用 tray.Refresh()：
-						// 实例列表变化由 OnInstancesChanged 驱动，连接变化由 OnConnectionChanged 驱动，
-						// 避免定时器每 5s 强制重建菜单导致打开中的菜单被关闭。
 					}
 				}
 			}
-		}()
-		// 立即执行一次发现
-		go func() {
-			mgr.MaintainConnection()
 		}()
 	}
 
@@ -202,8 +195,13 @@ func main() {
 		startScanTimer()
 	}
 
-	// 初始化托盘
+	// 初始化托盘（必须在立即扫描之前，确保托盘已就绪再接受刷新回调）
 	tray.Setup()
+
+	// 托盘就绪后立即触发一次扫描，结果通过 OnInstancesChanged 回调刷新菜单
+	if cfg.Enabled {
+		go mgr.MaintainConnection()
+	}
 
 	nlog.Info("进入 Fyne 主事件循环")
 	fyneApp.Run() // 阻塞直到退出
