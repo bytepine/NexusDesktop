@@ -30,7 +30,7 @@ type Config struct {
 // DefaultConfig 返回内置默认配置。
 func DefaultConfig() Config {
 	return Config{
-		Enabled:             false,
+		Enabled:             true,
 		HTTPPort:            6700,
 		ScanPortStart:       45000,
 		ScanPortEnd:         45100,
