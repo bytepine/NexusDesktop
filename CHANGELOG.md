@@ -5,6 +5,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-07-07
+
 ### Added
 - 构建脚本 `build.bat` / `build_beta.bat` / `build_release.bat` / `build.command` 一键跨平台打包
 - `build_desktop.py` 支持 `--build-type develop|release`，区分调试包与发布包
