@@ -499,6 +499,11 @@ func (m *Manager) releasePendingRequests() {
 
 // receiveLoop 在独立 goroutine 中持续读取 WebSocket 消息。
 func (m *Manager) receiveLoop(conn *websocket.Conn, epoch int64) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Errorf("receiveLoop panic: %v", r)
+		}
+	}()
 	for {
 		_, data, err := conn.ReadMessage()
 		if err != nil {
@@ -575,6 +580,11 @@ func (m *Manager) startKeepalive(conn *websocket.Conn, epoch int64) {
 	m.mu.Unlock()
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Errorf("keepalive panic: %v", r)
+			}
+		}()
 		for {
 			m.mu.Lock()
 			busy := len(m.pendingRequests) > 0
@@ -590,13 +600,15 @@ func (m *Manager) startKeepalive(conn *websocket.Conn, epoch int64) {
 				if atomic.LoadInt64(&m.connectionEpoch) != epoch {
 					return
 				}
+				// 与 sendWsRequest 共用 mu，避免与 WriteJSON 并发写同一连接导致 panic
 				m.mu.Lock()
 				wsAlive := m.ws == conn
-				m.mu.Unlock()
-				if !wsAlive {
-					return
+				var err error
+				if wsAlive {
+					err = conn.WriteMessage(websocket.PingMessage, nil)
 				}
-				if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				m.mu.Unlock()
+				if !wsAlive || err != nil {
 					return
 				}
 			}

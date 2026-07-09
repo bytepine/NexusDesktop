@@ -9,6 +9,10 @@
 package main
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -33,10 +37,15 @@ func main() {
 	}
 	defer ui.ReleaseLock()
 
-	// 初始化配置与日志
+	// 初始化配置与日志（须在 recover 之前，便于 crash.log 落盘到同一目录）
 	cfg, _ := config.Load()
 	nlog.Init(config.AppDir())
+	defer recoverAndLogCrash()
+
 	nlog.Infof("NexusDesktop v%s 启动", appVersion)
+
+	// 若曾启用开机自启但 exe 已迁移/删除，自动重写为当前路径
+	ui.RepairAutostart()
 
 	// 创建 UE 实例管理器
 	mgr := unreal.NewManager()
@@ -222,4 +231,24 @@ func main() {
 	stopScanTimer()
 	stopServer()
 	mgr.Dispose()
+}
+
+// recoverAndLogCrash 捕获未处理 panic，写入 crash.log 并记入主日志（windowsgui 下 stdout 不可见）。
+func recoverAndLogCrash() {
+	r := recover()
+	if r == nil {
+		return
+	}
+	stack := debug.Stack()
+	msg := fmt.Sprintf("panic: %v\n%s", r, stack)
+	nlog.Errorf("未处理 panic，进程即将退出:\n%s", msg)
+
+	crashPath := filepath.Join(config.AppDir(), "logs", "crash.log")
+	_ = os.MkdirAll(filepath.Dir(crashPath), 0o755)
+	entry := fmt.Sprintf("%s\n%s\n\n", time.Now().Format("2006-01-02 15:04:05.000"), msg)
+	f, err := os.OpenFile(crashPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err == nil {
+		_, _ = f.WriteString(entry)
+		_ = f.Close()
+	}
 }

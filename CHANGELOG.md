@@ -5,6 +5,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+- 开机自启：校验注册表/LaunchAgent 中的 exe 路径是否仍存在；启动时若路径失效则自动重写为当前可执行文件（修复 exe 迁移后菜单仍显示已启用但实际无法自启）
+- 切换 UE 实例偶发闪退：keepalive Ping 与 JSON-RPC 写共用同一把锁，消除 gorilla/websocket 并发写 panic
+- 托盘刷新：`Refresh` / `SetUpdateState` 经 `fyne.Do` 切回 UI 线程，避免 Fyne ≥2.6 后台 goroutine 直接改托盘导致偶发崩溃
+- 未处理 panic 写入 `logs/crash.log`；日志文件打开失败时写入 `logs/init-error.txt`（windowsgui 下 stdout 不可见）
+
 ## [1.0.3] - 2026-07-07
 
 ### Changed

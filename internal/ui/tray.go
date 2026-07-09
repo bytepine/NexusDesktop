@@ -70,9 +70,17 @@ func (tc *TrayController) openConfigWindow() {
 }
 
 // SetUpdateState 更新检查结果写入后刷新菜单，供外部（main）在事件循环就绪后调用。
+// 可从任意 goroutine 调用。
 func (tc *TrayController) SetUpdateState(state UpdateState) {
-	tc.updateState = state
-	tc.Refresh()
+	if tc.deskApp == nil {
+		tc.updateState = state
+		return
+	}
+	fyne.Do(func() {
+		tc.updateState = state
+		tc.rebuildMenu()
+		tc.updateIcon()
+	})
 }
 
 // Setup 初始化托盘图标与菜单，需在 Fyne 事件循环启动后调用。
@@ -86,12 +94,15 @@ func (tc *TrayController) Setup() {
 }
 
 // Refresh 重建托盘菜单（连接状态/实例列表变化后调用）。
+// 可从任意 goroutine 调用；内部经 fyne.Do 切回 UI 线程（Fyne ≥2.6 要求）。
 func (tc *TrayController) Refresh() {
 	if tc.deskApp == nil {
 		return
 	}
-	tc.rebuildMenu()
-	tc.updateIcon()
+	fyne.Do(func() {
+		tc.rebuildMenu()
+		tc.updateIcon()
+	})
 }
 
 func (tc *TrayController) rebuildMenu() {

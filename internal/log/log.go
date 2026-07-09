@@ -85,6 +85,9 @@ func openLogFile() {
 	path := filepath.Join(logDir, logFileName)
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
+		// windowsgui 下 stdout 不可见：额外尝试写 init-error.txt 便于排查
+		_ = os.WriteFile(filepath.Join(logDir, "init-error.txt"),
+			[]byte(fmt.Sprintf("%s open log failed: %v\n", time.Now().Format(time.RFC3339), err)), 0o644)
 		logger = log.New(os.Stdout, "", 0)
 		return
 	}
