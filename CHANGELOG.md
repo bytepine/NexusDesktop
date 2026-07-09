@@ -5,6 +5,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.0.4] - 2026-07-09
+
 ### Fixed
 - 开机自启：校验注册表/LaunchAgent 中的 exe 路径是否仍存在；启动时若路径失效则自动重写为当前可执行文件（修复 exe 迁移后菜单仍显示已启用但实际无法自启）
 - 切换 UE 实例偶发闪退：keepalive Ping 与 JSON-RPC 写共用同一把锁，消除 gorilla/websocket 并发写 panic
