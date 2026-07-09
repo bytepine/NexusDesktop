@@ -13,9 +13,10 @@ import (
 // configWindow 展示 MCP 客户端配置片段，提供 Streamable HTTP / SSE 切换与一键复制。
 // 参考 NexusRider NexusLinkConfigurable 的设计：先选类型，再复制。
 type configWindow struct {
-	app  fyne.App
-	win  fyne.Window
-	area *widget.Entry // 只读多行文本区，用于展示配置
+	app        fyne.App
+	win        fyne.Window
+	area       *widget.Entry // 只读多行文本区，用于展示配置
+	configText string        // 当前展示的配置片段（复制 / 防误编辑用）
 }
 
 // newConfigWindow 懒创建配置窗口（初始隐藏）。
@@ -28,13 +29,18 @@ func newConfigWindow(app fyne.App) *configWindow {
 	w.SetCloseIntercept(func() { w.Hide() })
 	cw.win = w
 
-	// 只读多行文本区
+	// 只读多行文本区：保持启用态以使用前景色（Disable 对比度过低），OnChanged 拦截误编辑
 	area := widget.NewMultiLineEntry()
 	area.Wrapping = fyne.TextWrapOff
-	area.Disable() // 禁止编辑，保留等宽外观
-	area.SetText(placeholder)
+	area.TextStyle = fyne.TextStyle{Monospace: true}
 	area.SetMinRowsVisible(12)
 	cw.area = area
+	area.OnChanged = func(s string) {
+		if s != cw.configText {
+			area.SetText(cw.configText)
+		}
+	}
+	cw.setConfigText(placeholder)
 
 	cw.win.SetContent(cw.buildContent())
 	return cw
@@ -44,7 +50,7 @@ const placeholder = "← 点击上方按钮生成对应配置"
 
 // show 刷新内容并显示窗口，port 为当前 MCP HTTP 端口。
 func (cw *configWindow) show(port int) {
-	cw.area.SetText(placeholder)
+	cw.setConfigText(placeholder)
 	// 用新端口重建按钮行（端口可能随设置变化）
 	cw.win.SetContent(cw.buildContentWithPort(port))
 	cw.win.Show()
@@ -57,21 +63,16 @@ func (cw *configWindow) buildContent() fyne.CanvasObject {
 
 func (cw *configWindow) buildContentWithPort(port int) fyne.CanvasObject {
 	streamBtn := widget.NewButton("Streamable HTTP 配置", func() {
-		cw.area.Enable()
-		cw.area.SetText(buildStreamConfig(port))
-		cw.area.Disable()
+		cw.setConfigText(buildStreamConfig(port))
 	})
 
 	sseBtn := widget.NewButton("SSE 配置", func() {
-		cw.area.Enable()
-		cw.area.SetText(buildSseConfig(port))
-		cw.area.Disable()
+		cw.setConfigText(buildSseConfig(port))
 	})
 
 	copyBtn := widget.NewButton("复制", func() {
-		text := cw.area.Text
-		if text != "" && text != placeholder {
-			cw.app.Clipboard().SetContent(text)
+		if cw.configText != "" && cw.configText != placeholder {
+			cw.app.Clipboard().SetContent(cw.configText)
 		}
 	})
 	copyBtn.Importance = widget.HighImportance
@@ -85,6 +86,11 @@ func (cw *configWindow) buildContentWithPort(port int) fyne.CanvasObject {
 		nil, nil, nil,
 		container.NewScroll(cw.area),
 	)
+}
+
+func (cw *configWindow) setConfigText(text string) {
+	cw.configText = text
+	cw.area.SetText(text)
 }
 
 func buildStreamConfig(port int) string {

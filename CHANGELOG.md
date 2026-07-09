@@ -5,6 +5,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+- MCP 客户端配置窗口：配置片段改用前景色展示（不再 `Disable` Entry），提升可读性与手动选中复制体验
+
 ## [1.0.4] - 2026-07-09
 
 ### Fixed
