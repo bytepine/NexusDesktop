@@ -85,6 +85,11 @@ type Manager struct {
 	OnConnectionChanged  func(port int)
 	OnToolsChanged       func()
 	OnInstancesChanged   func() // 实例列表内容发生变化时触发
+
+	// proxyFeedback 代理层转发失败（断连/超时/连接失败）的进程内缓冲，供 nexus/proxy_feedback 上报给 UE。
+	proxyFeedback *proxyFeedbackBuffer
+	// proxyFeedbackFlushing 并发保护：避免同一批事件被重复发送。
+	proxyFeedbackFlushing int32
 }
 
 // StateSnapshot 是 Manager 当前状态的只读快照，供 UI 安全读取。
@@ -116,6 +121,7 @@ func NewManager() *Manager {
 		ScanPortEnd:     45100,
 		pendingRequests: make(map[int64]chan WsRequestResult),
 		requestChain:    make(chan struct{}, 1),
+		proxyFeedback:   newProxyFeedbackBuffer(),
 	}
 	m.requestChain <- struct{}{} // 初始令牌
 	return m
@@ -654,6 +660,61 @@ func (m *Manager) FetchToolsList() ([]interface{}, error) {
 // ForwardToolCall 通过长连接转发 tools/call。
 func (m *Manager) ForwardToolCall(params map[string]interface{}) WsRequestResult {
 	return m.sendWsRequest("tools/call", params, toolsCallTimeoutMs)
+}
+
+// EnqueueProxyFeedback 把一条代理层失败事件放入进程内缓冲，供 FlushProxyFeedback 上报。
+func (m *Manager) EnqueueProxyFeedback(event ProxyFeedbackEvent) {
+	m.proxyFeedback.enqueue(event)
+}
+
+// FlushProxyFeedback 异步、fire-and-forget 地尝试上报缓冲中的代理层失败事件，
+// 不阻塞、不影响对 AI 的原始错误。旧版 NexusLink 未实现 nexus/proxy_feedback 时
+// 静默降级：标记 unsupported 后不再重试。flush 自身失败（仍未连接/超时）时把
+// 事件放回队首，等待下次连上再试，不上抛任何异常。
+func (m *Manager) FlushProxyFeedback() {
+	if m.proxyFeedback.isUnsupported() || !m.proxyFeedback.hasPending() {
+		return
+	}
+	if !atomic.CompareAndSwapInt32(&m.proxyFeedbackFlushing, 0, 1) {
+		return
+	}
+	go func() {
+		defer atomic.StoreInt32(&m.proxyFeedbackFlushing, 0)
+		for _, event := range m.proxyFeedback.drain() {
+			if m.proxyFeedback.isUnsupported() {
+				return
+			}
+			outcome := m.sendProxyFeedbackEvent(event)
+			if outcome.Status != "ok" {
+				// 反馈通道自身断连/超时：放回队首，下次连上再试，不级联报错。
+				m.proxyFeedback.requeue(event)
+				return
+			}
+			if isMethodNotFoundError(outcome.Response) {
+				m.proxyFeedback.markUnsupported()
+				log.Debug("UE 不支持 nexus/proxy_feedback（旧版 NexusLink），已跳过后续上报")
+				return
+			}
+		}
+	}()
+}
+
+// sendProxyFeedbackEvent 发送单条 nexus/proxy_feedback 请求，短超时避免拖慢正常连接流程。
+func (m *Manager) sendProxyFeedbackEvent(event ProxyFeedbackEvent) WsRequestResult {
+	params := map[string]interface{}{
+		"category": string(event.Category),
+		"proxy":    "desktop",
+	}
+	if event.Tool != "" {
+		params["tool"] = event.Tool
+	}
+	if event.ErrorText != "" {
+		params["errorText"] = event.ErrorText
+	}
+	if event.Note != "" {
+		params["note"] = event.Note
+	}
+	return m.sendWsRequest("nexus/proxy_feedback", params, 3*time.Second)
 }
 
 // ForwardToolCallToPort 通过一次性 WS 连接转发到指定端口（不改动长连接）。

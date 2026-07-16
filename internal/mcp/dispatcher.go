@@ -247,11 +247,25 @@ func (d *Dispatcher) handleToolsCall(id interface{}, params map[string]interface
 
 	switch outcome.Status {
 	case "disconnected":
-		return makeError(id, errInternalError, proxyCfg.ErrorMessages.NotConnected), nil
+		d.manager.EnqueueProxyFeedback(unreal.ProxyFeedbackEvent{
+			Category:  unreal.ProxyFeedbackDisconnect,
+			Tool:      toolName,
+			ErrorText: proxyCfg.ErrorMessages.NotConnected,
+		})
+		d.manager.FlushProxyFeedback()
+		return makeErrorWithData(id, errInternalError, proxyCfg.ErrorMessages.NotConnected,
+			map[string]interface{}{"errorKind": "proxy_not_connected"}), nil
 	case "timeout":
 		sec := int(unreal.ToolsCallTimeout().Seconds())
-		return makeError(id, errInternalError,
-			fmt.Sprintf("UE request timed out after %ds. %s", sec, proxyCfg.ErrorMessages.TimeoutHint)), nil
+		msg := fmt.Sprintf("UE request timed out after %ds. %s", sec, proxyCfg.ErrorMessages.TimeoutHint)
+		d.manager.EnqueueProxyFeedback(unreal.ProxyFeedbackEvent{
+			Category:  unreal.ProxyFeedbackTimeout,
+			Tool:      toolName,
+			ErrorText: msg,
+		})
+		d.manager.FlushProxyFeedback()
+		return makeErrorWithData(id, errInternalError, msg,
+			map[string]interface{}{"errorKind": "proxy_timeout"}), nil
 	}
 
 	resp := outcome.Response
@@ -314,6 +328,13 @@ func (d *Dispatcher) handleConnect(id interface{}, args map[string]interface{}) 
 		if d.onSessionReady != nil {
 			go d.onSessionReady()
 		}
+		// 连上后尝试补发断连期间积压的代理层失败事件。
+		d.manager.FlushProxyFeedback()
+	} else {
+		d.manager.EnqueueProxyFeedback(unreal.ProxyFeedbackEvent{
+			Category:  unreal.ProxyFeedbackConnectFail,
+			ErrorText: fmt.Sprintf("连接失败：端口 %d 无响应", port),
+		})
 	}
 	var msg string
 	if success {
@@ -348,6 +369,20 @@ func makeError(id interface{}, code int, message string) string {
 		"error": map[string]interface{}{
 			"code":    code,
 			"message": message,
+		},
+	}
+	b, _ := json.Marshal(msg)
+	return string(b)
+}
+
+func makeErrorWithData(id interface{}, code int, message string, data map[string]interface{}) string {
+	msg := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      id,
+		"error": map[string]interface{}{
+			"code":    code,
+			"message": message,
+			"data":    data,
 		},
 	}
 	b, _ := json.Marshal(msg)
