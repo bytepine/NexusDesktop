@@ -210,16 +210,33 @@ func (tc *TrayController) rebuildMenu() {
 		}
 	})
 
-	// 「检查更新」：有新版本时标签变更，点击跳转下载页
+	// 「检查更新」：显示当前版本；有新版本时跳转下载，否则手动复检
+	ver := tc.AppVersion
+	if ver == "" {
+		ver = "dev"
+	}
 	var updateLabel string
 	switch {
+	case tc.updateState.Checking:
+		updateLabel = fmt.Sprintf("正在检查更新… (v%s)", ver)
 	case tc.updateState.HasUpdate:
-		updateLabel = fmt.Sprintf("[新版本] v%s → 下载", tc.updateState.LatestVersion)
+		updateLabel = fmt.Sprintf("[新版本] v%s → 下载 (当前 v%s)", tc.updateState.LatestVersion, ver)
 	default:
-		updateLabel = "检查更新"
+		updateLabel = fmt.Sprintf("检查更新 (v%s)", ver)
 	}
 	updateItem := fyne.NewMenuItem(updateLabel, func() {
-		openURL(releasesURL)
+		if tc.updateState.HasUpdate {
+			openURL(releasesURL)
+			return
+		}
+		if tc.updateState.Checking {
+			return
+		}
+		tc.updateState = UpdateState{Checking: true}
+		tc.rebuildMenu()
+		CheckUpdate(tc.AppVersion, func(state UpdateState) {
+			tc.SetUpdateState(state)
+		})
 	})
 
 	quitItem := fyne.NewMenuItem("退出", func() {

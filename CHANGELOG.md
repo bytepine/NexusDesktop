@@ -5,6 +5,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.0.6] - 2026-07-17
+
+### Fixed
+- fix(updater): 检查更新改走 GitHub `releases/latest` 重定向（带 User-Agent），不再调 REST API（无鉴权常 403 导致静默失败）；用 semver 判断 `latest > current`；托盘菜单显示当前版本，点击可手动复检
+
 ## [1.0.5] - 2026-07-17
 
 ### Added
