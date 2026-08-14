@@ -144,8 +144,7 @@ begin
     GetVersionNumbersString(ExePath, InstalledVerStr);
     if InstalledVerStr = '' then
       InstalledVerStr := '?';
-    MsgBox(FmtMessage(CustomMessage('NewerAlreadyInstalled'),
-      [InstalledVerStr, '{#MyAppVersion}']), mbInformation, MB_OK);
+    MsgBox(FmtMessage(CustomMessage('NewerAlreadyInstalled'), [InstalledVerStr, '{#MyAppVersion}']), mbInformation, MB_OK);
   end;
 end;
 
