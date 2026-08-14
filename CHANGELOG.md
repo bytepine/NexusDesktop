@@ -5,6 +5,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-08-14
+
 ### Added
 - feat(updater): 应用内静默下载/替换失败时打开对应版本的 GitHub Release 页，便于手动下安装包（从 DMG 运行除外）
 
