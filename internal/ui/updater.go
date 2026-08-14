@@ -24,6 +24,7 @@ const (
 	releasesURL        = "https://github.com/bytepine/NexusDesktop/releases/latest"
 	tagPrefix          = "nexus-desktop-v"
 	githubDownloadBase = "https://github.com/bytepine/NexusDesktop/releases/download/"
+	githubTagBase      = "https://github.com/bytepine/NexusDesktop/releases/tag/"
 )
 
 var (
@@ -120,6 +121,17 @@ func updateZipURLFor(goos, version string) string {
 	default:
 		return ""
 	}
+}
+
+// githubReleasePage 返回指定版本的 GitHub Release 页；版本为空则打开 latest。
+func githubReleasePage(version string) string {
+	v := strings.TrimSpace(version)
+	v = strings.TrimPrefix(v, "v")
+	v = strings.TrimPrefix(v, "V")
+	if v == "" {
+		return releasesURL
+	}
+	return githubTagBase + tagPrefix + v
 }
 
 func downloadUpdateZip(version, dest, userAgent string) error {

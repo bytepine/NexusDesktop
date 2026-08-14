@@ -65,6 +65,17 @@ func TestUpdateZipURLFor(t *testing.T) {
 	}
 }
 
+func TestGithubReleasePage(t *testing.T) {
+	got := githubReleasePage("1.2.3")
+	want := "https://github.com/bytepine/NexusDesktop/releases/tag/nexus-desktop-v1.2.3"
+	if got != want {
+		t.Errorf("githubReleasePage = %q, want %q", got, want)
+	}
+	if githubReleasePage("") != releasesURL {
+		t.Error("empty version should open latest")
+	}
+}
+
 func TestExtractZipAndFindExe(t *testing.T) {
 	dir := t.TempDir()
 	zipPath := filepath.Join(dir, "upd.zip")

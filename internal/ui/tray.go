@@ -252,6 +252,9 @@ func (tc *TrayController) rebuildMenu() {
 					kind := err.Error()
 					if errors.Is(err, ErrRunFromDMG) {
 						kind = "dmg"
+					} else {
+						// 静默下载/替换失败：打开该版本 Release 页，便于手动下安装包
+						openURL(githubReleasePage(latest))
 					}
 					tc.SetUpdateState(UpdateState{
 						HasUpdate:     true,

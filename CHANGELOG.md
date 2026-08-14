@@ -5,6 +5,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- feat(updater): 应用内静默下载/替换失败时打开对应版本的 GitHub Release 页，便于手动下安装包（从 DMG 运行除外）
+
 ### Changed
 - chore(release): 更新包文件名改为 `*-update.zip`，与安装包（`-setup.exe` / `.dmg`）区分，避免手动下载装错
 
