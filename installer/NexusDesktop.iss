@@ -175,9 +175,9 @@ begin
   begin
     WizardForm.WelcomeLabel2.Caption :=
       FmtMessage(CustomMessage('UpgradeNotice'), [PrevVer, '{#MyAppVersion}']) +
-      #13#10#13#10 +
+      Chr(13) + Chr(10) + Chr(13) + Chr(10) +
       CustomMessage('SwitchScopeHint') +
-      #13#10#13#10 +
+      Chr(13) + Chr(10) + Chr(13) + Chr(10) +
       WizardForm.WelcomeLabel2.Caption;
   end;
 end;

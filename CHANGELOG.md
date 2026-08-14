@@ -17,6 +17,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - chore(installer): 构建依赖改为 Inno Setup 7（64 位 ISCC，`SetupArchitecture=x64`）
 - chore(release): Windows 发布产物改为仅 Setup.exe，不再打 zip 便携包
 
+### Fixed
+- fix(installer): Inno Setup 7 将 Pascal `#13#10` 当成预处理器指令导致 Setup 编译失败，改为 `Chr(13)` / `Chr(10)`
+
 ## [1.0.6] - 2026-07-17
 
 ### Fixed
