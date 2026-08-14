@@ -5,6 +5,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-08-14
+
 ### Added
 - feat(i18n): 界面支持简体中文 / 英文；默认跟随系统语言，设置窗口可手动切换
 - feat(installer): Windows 正式安装包（Inno Setup Setup.exe）；当前用户默认 `%LOCALAPPDATA%\Programs\NexusDesktop`，全部用户默认 `C:\Program Files\NexusDesktop`；已安装旧版时原地升级（保留配置）；卸载走系统「应用和功能」，可选删除当前用户配置/日志
