@@ -8,6 +8,8 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/widget"
+
+	"github.com/bytepine/NexusDesktop/internal/i18n"
 )
 
 // configWindow 展示 MCP 客户端配置片段，提供 Streamable HTTP / SSE 切换与一键复制。
@@ -15,21 +17,21 @@ import (
 type configWindow struct {
 	app        fyne.App
 	win        fyne.Window
-	area       *widget.Entry // 只读多行文本区，用于展示配置
-	configText string        // 当前展示的配置片段（复制 / 防误编辑用）
+	area       *widget.Entry
+	configText string
+	lastPort   int
+	kind       string // "" | "stream" | "sse"
 }
 
-// newConfigWindow 懒创建配置窗口（初始隐藏）。
 func newConfigWindow(app fyne.App) *configWindow {
 	cw := &configWindow{app: app}
 
-	w := app.NewWindow("MCP 客户端配置")
+	w := app.NewWindow(i18n.T("mcp.title"))
 	w.Resize(fyne.NewSize(540, 400))
 	w.SetFixedSize(true)
 	w.SetCloseIntercept(func() { w.Hide() })
 	cw.win = w
 
-	// 只读多行文本区：保持启用态以使用前景色（Disable 对比度过低），OnChanged 拦截误编辑
 	area := widget.NewMultiLineEntry()
 	area.Wrapping = fyne.TextWrapOff
 	area.TextStyle = fyne.TextStyle{Monospace: true}
@@ -40,21 +42,32 @@ func newConfigWindow(app fyne.App) *configWindow {
 			area.SetText(cw.configText)
 		}
 	}
-	cw.setConfigText(placeholder)
-
-	cw.win.SetContent(cw.buildContent())
+	cw.setConfigText(i18n.T("mcp.placeholder"))
+	cw.win.SetContent(cw.buildContentWithPort(0))
 	return cw
 }
 
-const placeholder = "← 点击上方按钮生成对应配置"
-
-// show 刷新内容并显示窗口，port 为当前 MCP HTTP 端口。
 func (cw *configWindow) show(port int) {
-	cw.setConfigText(placeholder)
-	// 用新端口重建按钮行（端口可能随设置变化）
+	cw.lastPort = port
+	cw.kind = ""
+	cw.setConfigText(i18n.T("mcp.placeholder"))
+	cw.win.SetTitle(i18n.T("mcp.title"))
 	cw.win.SetContent(cw.buildContentWithPort(port))
 	cw.win.Show()
 	cw.win.RequestFocus()
+}
+
+func (cw *configWindow) retranslate() {
+	cw.win.SetTitle(i18n.T("mcp.title"))
+	switch cw.kind {
+	case "stream":
+		cw.setConfigText(buildStreamConfig(cw.lastPort))
+	case "sse":
+		cw.setConfigText(buildSseConfig(cw.lastPort))
+	default:
+		cw.setConfigText(i18n.T("mcp.placeholder"))
+	}
+	cw.win.SetContent(cw.buildContentWithPort(cw.lastPort))
 }
 
 func (cw *configWindow) buildContent() fyne.CanvasObject {
@@ -62,16 +75,21 @@ func (cw *configWindow) buildContent() fyne.CanvasObject {
 }
 
 func (cw *configWindow) buildContentWithPort(port int) fyne.CanvasObject {
-	streamBtn := widget.NewButton("Streamable HTTP 配置", func() {
+	streamBtn := widget.NewButton(i18n.T("mcp.stream"), func() {
+		cw.kind = "stream"
+		cw.lastPort = port
 		cw.setConfigText(buildStreamConfig(port))
 	})
 
-	sseBtn := widget.NewButton("SSE 配置", func() {
+	sseBtn := widget.NewButton(i18n.T("mcp.sse"), func() {
+		cw.kind = "sse"
+		cw.lastPort = port
 		cw.setConfigText(buildSseConfig(port))
 	})
 
-	copyBtn := widget.NewButton("复制", func() {
-		if cw.configText != "" && cw.configText != placeholder {
+	copyBtn := widget.NewButton(i18n.T("mcp.copy"), func() {
+		ph := i18n.T("mcp.placeholder")
+		if cw.configText != "" && cw.configText != ph {
 			cw.app.Clipboard().SetContent(cw.configText)
 		}
 	})
@@ -95,7 +113,7 @@ func (cw *configWindow) setConfigText(text string) {
 
 func buildStreamConfig(port int) string {
 	return fmt.Sprintf(
-		"# Cursor  (~/.cursor/mcp.json → mcpServers 节点)\n"+
+		i18n.T("mcp.comment_cursor")+"\n"+
 			"\"nexus-unreal\": {\n"+
 			"  \"url\": \"http://127.0.0.1:%d/stream\"\n"+
 			"}\n\n"+
@@ -110,7 +128,7 @@ func buildStreamConfig(port int) string {
 
 func buildSseConfig(port int) string {
 	return fmt.Sprintf(
-		"# Cursor  (~/.cursor/mcp.json → mcpServers 节点)\n"+
+		i18n.T("mcp.comment_cursor")+"\n"+
 			"\"nexus-unreal\": {\n"+
 			"  \"url\": \"http://127.0.0.1:%d/sse\"\n"+
 			"}\n\n"+

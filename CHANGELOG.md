@@ -5,6 +5,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- feat(i18n): 界面支持简体中文 / 英文；默认跟随系统语言，设置窗口可手动切换
+- feat(installer): Windows 正式安装包（Inno Setup Setup.exe）；当前用户默认 `%LOCALAPPDATA%\Programs\NexusDesktop`，全部用户默认 `C:\Program Files\NexusDesktop`；已安装旧版时原地升级（保留配置）；卸载走系统「应用和功能」，可选删除当前用户配置/日志
+- feat(updater): 托盘发现新版本后按版本号下载 zip 更新包，覆盖安装目录并重启（Windows / macOS）；Windows 同步「应用和功能」DisplayVersion；手动运行旧 Setup 时若已装 exe 更新则拒绝降级
+- feat(release): 同一次 release 构建同时产出安装包（Setup.exe / DMG）与 zip 更新包（Windows 内含 exe，macOS 内含 `.app`）
+
+### Changed
+- chore(installer): 构建依赖改为 Inno Setup 7（64 位 ISCC，`SetupArchitecture=x64`）
+- chore(release): Windows 发布产物改为仅 Setup.exe，不再打 zip 便携包
+
 ## [1.0.6] - 2026-07-17
 
 ### Fixed

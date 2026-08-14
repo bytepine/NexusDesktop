@@ -21,6 +21,7 @@ import (
 
 	"github.com/bytepine/NexusDesktop/assets"
 	"github.com/bytepine/NexusDesktop/internal/config"
+	"github.com/bytepine/NexusDesktop/internal/i18n"
 	nlog "github.com/bytepine/NexusDesktop/internal/log"
 	"github.com/bytepine/NexusDesktop/internal/mcp"
 	"github.com/bytepine/NexusDesktop/internal/ui"
@@ -39,6 +40,7 @@ func main() {
 
 	// 初始化配置与日志（须在 recover 之前，便于 crash.log 落盘到同一目录）
 	cfg, _ := config.Load()
+	i18n.Apply(cfg.Language)
 	nlog.Init(config.AppDir())
 	defer recoverAndLogCrash()
 
@@ -46,6 +48,7 @@ func main() {
 
 	// 若曾启用开机自启但 exe 已迁移/删除，自动重写为当前路径
 	ui.RepairAutostart()
+	ui.RepairDisplayVersion(appVersion)
 
 	// 创建 UE 实例管理器
 	mgr := unreal.NewManager()
@@ -202,6 +205,7 @@ func main() {
 
 	// 配置变更热更新（扫描参数）
 	config.OnChange(func(c config.Config) {
+		i18n.Apply(c.Language)
 		mgr.ScanPortStart = c.ScanPortStart
 		mgr.ScanPortEnd = c.ScanPortEnd
 		if c.Enabled {

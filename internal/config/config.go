@@ -25,6 +25,8 @@ type Config struct {
 	ScanPortEnd   int `json:"scanPortEnd"`
 	// ScanIntervalSeconds 是定时发现 UE 实例的间隔秒数（默认 5）。
 	ScanIntervalSeconds int `json:"scanIntervalSeconds"`
+	// Language 是界面语言：auto（跟随系统，默认）、zh-CN、en。
+	Language string `json:"language"`
 }
 
 // DefaultConfig 返回内置默认配置。
@@ -35,6 +37,7 @@ func DefaultConfig() Config {
 		ScanPortStart:       45000,
 		ScanPortEnd:         45100,
 		ScanIntervalSeconds: 5,
+		Language:            "auto",
 	}
 }
 
@@ -141,5 +144,13 @@ func sanitize(c *Config) {
 	}
 	if c.ScanIntervalSeconds < 1 {
 		c.ScanIntervalSeconds = 5
+	}
+	switch c.Language {
+	case "", "auto", "zh-CN", "en":
+		if c.Language == "" {
+			c.Language = "auto"
+		}
+	default:
+		c.Language = "auto"
 	}
 }

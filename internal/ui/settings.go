@@ -11,6 +11,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/bytepine/NexusDesktop/internal/config"
+	"github.com/bytepine/NexusDesktop/internal/i18n"
 	"github.com/bytepine/NexusDesktop/internal/log"
 	"github.com/bytepine/NexusDesktop/internal/unreal"
 )
@@ -26,8 +27,8 @@ type SettingsWindow struct {
 // NewSettingsWindow 创建设置窗口（初始隐藏）。
 func NewSettingsWindow(app fyne.App, mgr *unreal.Manager) *SettingsWindow {
 	sw := &SettingsWindow{manager: mgr}
-	w := app.NewWindow("NexusDesktop 设置")
-	w.Resize(fyne.NewSize(480, 460))
+	w := app.NewWindow(i18n.T("settings.title"))
+	w.Resize(fyne.NewSize(480, 520))
 	w.SetFixedSize(true)
 	// 关闭按钮仅隐藏，不退出
 	w.SetCloseIntercept(func() {
@@ -52,27 +53,50 @@ func (sw *SettingsWindow) Show() {
 
 func (sw *SettingsWindow) buildContent() {
 	cfg := config.Get()
+	sw.win.SetTitle(i18n.T("settings.title"))
 
 	// ---- 服务器开关 ----
-	enabledCheck := widget.NewCheck("启用中转服务器", nil)
+	enabledCheck := widget.NewCheck(i18n.T("settings.enable_proxy"), nil)
 	enabledCheck.SetChecked(cfg.Enabled)
 
 	// ---- 端口设置 ----
 	httpPortEntry := widget.NewEntry()
 	httpPortEntry.SetText(fmt.Sprintf("%d", cfg.HTTPPort))
-	httpPortEntry.SetPlaceHolder("默认 6700")
+	httpPortEntry.SetPlaceHolder(i18n.T("settings.placeholder", 6700))
 
 	scanStartEntry := widget.NewEntry()
 	scanStartEntry.SetText(fmt.Sprintf("%d", cfg.ScanPortStart))
-	scanStartEntry.SetPlaceHolder("默认 45000")
+	scanStartEntry.SetPlaceHolder(i18n.T("settings.placeholder", 45000))
 
 	scanEndEntry := widget.NewEntry()
 	scanEndEntry.SetText(fmt.Sprintf("%d", cfg.ScanPortEnd))
-	scanEndEntry.SetPlaceHolder("默认 45100")
+	scanEndEntry.SetPlaceHolder(i18n.T("settings.placeholder", 45100))
 
 	scanIntervalEntry := widget.NewEntry()
 	scanIntervalEntry.SetText(fmt.Sprintf("%d", cfg.ScanIntervalSeconds))
-	scanIntervalEntry.SetPlaceHolder("默认 5")
+	scanIntervalEntry.SetPlaceHolder(i18n.T("settings.placeholder", 5))
+
+	// ---- 界面语言：立即生效并落盘 ----
+	langOpts := i18n.SelectOptions()
+	langSelect := widget.NewSelect(langOpts, nil)
+	idx := i18n.SelectIndex(cfg.Language)
+	if idx >= 0 && idx < len(langOpts) {
+		langSelect.SetSelected(langOpts[idx])
+	}
+	langSelect.OnChanged = func(label string) {
+		newCfg := config.Get()
+		newCfg.Language = i18n.PrefFromSelect(label)
+		if err := config.Save(newCfg); err != nil {
+			log.Errorf("保存语言失败: %v", err)
+			return
+		}
+		i18n.Apply(newCfg.Language)
+		if sw.tray != nil {
+			sw.tray.ApplyLanguage()
+		} else {
+			sw.buildContent()
+		}
+	}
 
 	// ---- 已发现实例列表 ----
 	snap := sw.manager.Snapshot()
@@ -81,10 +105,10 @@ func (sw *SettingsWindow) buildContent() {
 	wsOpen := snap.WsOpen
 
 	instanceRows := []fyne.CanvasObject{
-		widget.NewLabelWithStyle("已发现 UE 实例", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		widget.NewLabelWithStyle(i18n.T("settings.instances"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 	}
 	if len(instances) == 0 {
-		instanceRows = append(instanceRows, widget.NewLabel("（未发现实例）"))
+		instanceRows = append(instanceRows, widget.NewLabel(i18n.T("tray.no_instances")))
 	}
 	for _, inst := range instances {
 		inst := inst
@@ -99,13 +123,13 @@ func (sw *SettingsWindow) buildContent() {
 				if sw.tray != nil {
 					sw.tray.Refresh()
 				}
-				sw.buildContent() // 刷新界面
+				sw.buildContent()
 				sw.win.Content().Refresh()
 			})
 		}
 		instanceRows = append(instanceRows, btn)
 	}
-	refreshBtn := widget.NewButton("刷新实例列表", func() {
+	refreshBtn := widget.NewButton(i18n.T("settings.refresh"), func() {
 		sw.manager.DiscoverInstances()
 		sw.buildContent()
 		sw.win.Content().Refresh()
@@ -115,51 +139,50 @@ func (sw *SettingsWindow) buildContent() {
 	})
 	instanceRows = append(instanceRows, refreshBtn)
 
-	// ---- 保存/取消按钮 ----
 	statusLabel := widget.NewLabel("")
 
-	saveBtn := widget.NewButton("保存", func() {
+	saveBtn := widget.NewButton(i18n.T("settings.save"), func() {
 		httpPort, _ := strconv.Atoi(httpPortEntry.Text)
 		scanStart, _ := strconv.Atoi(scanStartEntry.Text)
 		scanEnd, _ := strconv.Atoi(scanEndEntry.Text)
 		interval, _ := strconv.Atoi(scanIntervalEntry.Text)
 
-		newCfg := config.Config{
-			Enabled:             enabledCheck.Checked,
-			HTTPPort:            httpPort,
-			ScanPortStart:       scanStart,
-			ScanPortEnd:         scanEnd,
-			ScanIntervalSeconds: interval,
-		}
+		newCfg := config.Get()
+		newCfg.Enabled = enabledCheck.Checked
+		newCfg.HTTPPort = httpPort
+		newCfg.ScanPortStart = scanStart
+		newCfg.ScanPortEnd = scanEnd
+		newCfg.ScanIntervalSeconds = interval
 		if err := config.Save(newCfg); err != nil {
-			statusLabel.SetText("保存失败: " + err.Error())
+			statusLabel.SetText(i18n.T("settings.save_failed", err.Error()))
 			log.Errorf("设置保存失败: %v", err)
 			return
 		}
-		statusLabel.SetText("已保存")
+		statusLabel.SetText(i18n.T("settings.saved"))
 		if sw.tray != nil {
 			sw.tray.Refresh()
 		}
 	})
 	saveBtn.Importance = widget.HighImportance
 
-	cancelBtn := widget.NewButton("关闭", func() {
+	cancelBtn := widget.NewButton(i18n.T("settings.close"), func() {
 		sw.win.Hide()
 	})
 
-	// ---- 布局 ----
 	form := container.NewVBox(
-		widget.NewLabelWithStyle("服务器配置", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		widget.NewLabelWithStyle(i18n.T("settings.server_section"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		enabledCheck,
 		container.NewGridWithColumns(2,
-			widget.NewLabel("MCP HTTP 端口"),
+			widget.NewLabel(i18n.T("settings.http_port")),
 			httpPortEntry,
-			widget.NewLabel("UE 扫描起始端口"),
+			widget.NewLabel(i18n.T("settings.scan_start")),
 			scanStartEntry,
-			widget.NewLabel("UE 扫描结束端口"),
+			widget.NewLabel(i18n.T("settings.scan_end")),
 			scanEndEntry,
-			widget.NewLabel("扫描间隔（秒）"),
+			widget.NewLabel(i18n.T("settings.scan_interval")),
 			scanIntervalEntry,
+			widget.NewLabel(i18n.T("settings.language")),
+			langSelect,
 		),
 		widget.NewSeparator(),
 	)

@@ -21,7 +21,7 @@ NexusDesktop 是一个**独立的本地 MCP 中转程序**，无需安装 IDE �
 
 | 组件 | 要求 |
 |------|------|
-| **NexusDesktop** | 直接下载 `.exe` / `.dmg`，无需 Go / Node / 运行时 |
+| **NexusDesktop** | 下载 Setup.exe / `.dmg`，无需 Go / Node / 运行时 |
 | **NexusLink**（UE 插件） | [NexusLink Releases](https://github.com/bytepine/NexusLink/releases)；UE 4.26+ |
 | **Windows** | Windows 10 / 11（amd64） |
 | **macOS** | macOS 12+（Monterey）；Intel / Apple Silicon 通用 |
@@ -32,8 +32,37 @@ NexusDesktop 是一个**独立的本地 MCP 中转程序**，无需安装 IDE �
 
 从 [Releases](https://github.com/bytepine/NexusDesktop/releases) 下载最新版本：
 
-- **Windows**：`NexusDesktop-windows-amd64-v<版本号>.zip`（解压后双击 `NexusDesktop.exe` 运行，无需安装）
+- **Windows**：`NexusDesktop-windows-amd64-v<版本号>-setup.exe` — 安装向导，可从系统「应用和功能」卸载
 - **macOS**：`NexusDesktop-darwin-universal.dmg`（Universal Binary，支持 Intel + Apple Silicon）
+
+### Windows 安装与卸载
+
+安装范围仿 Python.org 安装器，默认目录随范围变化：
+
+| 范围 | 权限 | 默认目录 |
+|------|------|----------|
+| 当前用户（默认） | 无需管理员 | `%LOCALAPPDATA%\Programs\NexusDesktop` |
+| 全部用户 | 需 UAC | `C:\Program Files\NexusDesktop` |
+
+- 检测到已安装的旧版时**原地升级**（沿用上次目录与范围，配置/日志保留）
+- 若已通过应用内更新装上**更新**的版本，再运行旧 Setup 会被拒绝，避免降级
+- 若要在「当前用户」与「全部用户」之间切换，请先卸载再安装
+- **卸载**：Windows 设置 → 应用 → NexusDesktop；可选择是否删除当前用户配置（`%APPDATA%\NexusDesktop`）
+- 配置/日志始终在 `%APPDATA%\NexusDesktop`，与安装范围无关
+
+### 应用内更新
+
+托盘「检查更新」发现新版本后，按该版本号下载 GitHub Release 上的 **zip 更新包**（不是安装包），解压后覆盖当前安装并重启：
+
+| 平台 | 安装包 | 更新包 |
+|------|--------|--------|
+| Windows | `NexusDesktop-windows-amd64-v<版本>-setup.exe` | `NexusDesktop-windows-amd64-v<版本>.zip`（内含 `NexusDesktop.exe`） |
+| macOS | `NexusDesktop-darwin-universal.dmg` | `NexusDesktop-darwin-universal-v<版本>.zip`（内含 `NexusDesktop.app`） |
+
+- zip **不是**便携安装包；首次安装请用 Setup.exe / DMG
+- **macOS**：须先把 `.app` 拖入 `Applications` 再更新；直接从 DMG 运行会失败
+- 安装到 `Program Files` 时，替换文件会请求一次管理员权限
+- 版本以运行中的应用为准；Windows 会同步「应用和功能」里的显示版本
 
 ---
 
@@ -47,7 +76,7 @@ NexusDesktop 是一个**独立的本地 MCP 中转程序**，无需安装 IDE �
 
 ### 2. 启动 NexusDesktop
 
-**Windows**：双击 `NexusDesktop.exe`，程序进入系统托盘。
+**Windows**：Setup 安装后从开始菜单启动，程序进入系统托盘。
 
 **macOS**：打开 `NexusDesktop-darwin-universal.dmg`，将 `NexusDesktop.app` 拖入 `Applications`，双击启动。程序不会出现在 Dock，仅在菜单栏（系统托盘）常驻。
 
@@ -60,7 +89,7 @@ NexusDesktop 是一个**独立的本地 MCP 中转程序**，无需安装 IDE �
 | 扫描 UE 实例 | 主动触发一次端口扫描 |
 | ✓ 启用中转服务器 | 启停 MCP HTTP 监听（默认 `:6700`） |
 | 复制 MCP 客户端配置 | 复制 JSON 到剪贴板 |
-| 检查更新 | 查询最新 Release；发现新版本时显示版本号并跳转下载页 |
+| 检查更新 | 查询最新 Release；发现新版本时下载 zip 更新包，覆盖安装目录后自动重启 |
 | 设置… | 打开设置窗口 |
 | 打开日志目录 | 打开日志目录 |
 | 开机自启 | 切换开机自启 |
@@ -100,6 +129,7 @@ NexusDesktop 是一个**独立的本地 MCP 中转程序**，无需安装 IDE �
 | UE 扫描起始端口 | 45000 | UE 实例扫描范围 |
 | UE 扫描结束端口 | 45100 | UE 实例扫描范围 |
 | 扫描间隔（秒） | 5 | 定时重新发现间隔 |
+| 界面语言 | 跟随系统 | 简体中文 / English；可手动切换 |
 
 关闭窗口仅隐藏回托盘，不退出程序。
 
@@ -167,7 +197,7 @@ CGO_ENABLED=1 GOARCH=amd64 go build -o NexusDesktop-amd64 ./cmd/nexusdesktop/
 lipo -create -output NexusDesktop NexusDesktop-arm64 NexusDesktop-amd64
 ```
 
-> **注意（Windows）**：GCC 16+ (binutils 2.46+) 产生 BigOBJ 格式，Go CGO 暂不支持。推荐使用 GCC 14.x（如 [w64devkit v1.23.0](https://github.com/skeeto/w64devkit/releases/tag/v1.23.0)）。
+> **注意（Windows）**：GCC 16+ (binutils 2.46+) 产生 BigOBJ 格式，Go CGO 暂不支持。推荐使用 GCC 14.x（如 [w64devkit v1.23.0](https://github.com/skeeto/w64devkit/releases/tag/v1.23.0)）。release 安装包另需 [Inno Setup 7](https://jrsoftware.org/isdl.php)（`winget install JRSoftware.InnoSetup.7`）。
 
 ---
 

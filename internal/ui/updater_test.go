@@ -2,7 +2,12 @@
 
 package ui
 
-import "testing"
+import (
+	"archive/zip"
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestIsNewerVersion(t *testing.T) {
 	cases := []struct {
@@ -41,5 +46,70 @@ func TestParseLatestTagFromURL(t *testing.T) {
 		if got := parseLatestTagFromURL(c.url); got != c.want {
 			t.Errorf("parseLatestTagFromURL(%q) = %q, want %q", c.url, got, c.want)
 		}
+	}
+}
+
+func TestUpdateZipURLFor(t *testing.T) {
+	win := updateZipURLFor("windows", "1.2.3")
+	wantWin := "https://github.com/bytepine/NexusDesktop/releases/download/nexus-desktop-v1.2.3/NexusDesktop-windows-amd64-v1.2.3.zip"
+	if win != wantWin {
+		t.Errorf("windows url = %q, want %q", win, wantWin)
+	}
+	mac := updateZipURLFor("darwin", "1.2.3")
+	wantMac := "https://github.com/bytepine/NexusDesktop/releases/download/nexus-desktop-v1.2.3/NexusDesktop-darwin-universal-v1.2.3.zip"
+	if mac != wantMac {
+		t.Errorf("darwin url = %q, want %q", mac, wantMac)
+	}
+	if updateZipURLFor("linux", "1.2.3") != "" {
+		t.Error("linux should have no in-place zip url")
+	}
+}
+
+func TestExtractZipAndFindExe(t *testing.T) {
+	dir := t.TempDir()
+	zipPath := filepath.Join(dir, "upd.zip")
+	zf, err := os.Create(zipPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := zip.NewWriter(zf)
+	fw, err := w.Create("NexusDesktop.exe")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fw.Write([]byte("fake-exe")); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	_ = zf.Close()
+
+	out := filepath.Join(dir, "out")
+	if err := extractZip(zipPath, out); err != nil {
+		t.Fatal(err)
+	}
+	found, err := findNamedFile(out, "NexusDesktop.exe")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(found)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "fake-exe" {
+		t.Fatalf("content = %q", data)
+	}
+}
+
+func TestZipSlipRejected(t *testing.T) {
+	if _, err := zipSlipSafe(t.TempDir(), "../evil.exe"); err == nil {
+		t.Fatal("expected zip slip to be rejected")
+	}
+}
+
+func TestSupportsInPlaceUpdate(t *testing.T) {
+	if SupportsInPlaceUpdate("dev") || SupportsInPlaceUpdate("") {
+		t.Fatal("dev build must not apply in-place update")
 	}
 }

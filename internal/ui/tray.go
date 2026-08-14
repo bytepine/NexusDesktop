@@ -4,6 +4,7 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -14,6 +15,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 
 	"github.com/bytepine/NexusDesktop/internal/config"
+	"github.com/bytepine/NexusDesktop/internal/i18n"
 	"github.com/bytepine/NexusDesktop/internal/log"
 	"github.com/bytepine/NexusDesktop/internal/unreal"
 )
@@ -116,15 +118,15 @@ func (tc *TrayController) rebuildMenu() {
 	if wsOpen && connPort > 0 {
 		for _, inst := range snap.Instances {
 			if inst.Port == connPort {
-				statusLabel = fmt.Sprintf("已连接：%s (:%d)", inst.ProjectName, connPort)
+				statusLabel = i18n.T("tray.status_connected_named", inst.ProjectName, connPort)
 				break
 			}
 		}
 		if statusLabel == "" {
-			statusLabel = fmt.Sprintf("已连接 :%d", connPort)
+			statusLabel = i18n.T("tray.status_connected_port", connPort)
 		}
 	} else {
-		statusLabel = "未连接 UE 实例"
+		statusLabel = i18n.T("tray.status_disconnected")
 	}
 
 	// 实例子菜单
@@ -144,14 +146,14 @@ func (tc *TrayController) rebuildMenu() {
 	}
 	if len(instanceItems) == 0 {
 		instanceItems = []*fyne.MenuItem{
-			fyne.NewMenuItem("（未发现实例）", nil),
+			fyne.NewMenuItem(i18n.T("tray.no_instances"), nil),
 		}
 	}
-	instancesMenu := fyne.NewMenuItem("选择 UE 实例", nil)
+	instancesMenu := fyne.NewMenuItem(i18n.T("tray.select_instance"), nil)
 	instancesMenu.ChildMenu = fyne.NewMenu("", instanceItems...)
 
 	// 「启用中转服务器」开关
-	serverToggleLabel := "启用中转服务器"
+	serverToggleLabel := i18n.T("tray.enable_proxy")
 	if cfg.Enabled {
 		serverToggleLabel = "✓ " + serverToggleLabel
 	}
@@ -169,22 +171,22 @@ func (tc *TrayController) rebuildMenu() {
 	})
 
 	// 「MCP 客户端配置」—— 打开配置展示窗口，参考 NexusRider 设置面板
-	copyConfig := fyne.NewMenuItem("MCP 客户端配置…", func() {
+	copyConfig := fyne.NewMenuItem(i18n.T("tray.mcp_config"), func() {
 		tc.openConfigWindow()
 	})
 
 	// 「设置…」打开设置窗口（懒创建）
-	settingsItem := fyne.NewMenuItem("设置…", func() {
+	settingsItem := fyne.NewMenuItem(i18n.T("tray.settings"), func() {
 		tc.openSettings()
 	})
 
 	// 「打开日志目录」
-	openLogs := fyne.NewMenuItem("打开日志目录", func() {
+	openLogs := fyne.NewMenuItem(i18n.T("tray.open_logs"), func() {
 		openDirectory(log.LogDir())
 	})
 
 	// 「开机自启」开关
-	autostartLabel := "开机自启"
+	autostartLabel := i18n.T("tray.autostart")
 	if IsAutostartEnabled() {
 		autostartLabel = "✓ " + autostartLabel
 	}
@@ -197,39 +199,71 @@ func (tc *TrayController) rebuildMenu() {
 	})
 
 	// 「断开连接」
-	disconnectItem := fyne.NewMenuItem("断开 UE 连接", func() {
+	disconnectItem := fyne.NewMenuItem(i18n.T("tray.disconnect"), func() {
 		tc.manager.Disconnect()
 		tc.Refresh()
 	})
 	disconnectItem.Disabled = !wsOpen
 
 	// 「扫描实例」主动触发一次发现
-	scanItem := fyne.NewMenuItem("扫描 UE 实例", func() {
+	scanItem := fyne.NewMenuItem(i18n.T("tray.scan"), func() {
 		if tc.OnRefreshInstances != nil {
 			tc.OnRefreshInstances()
 		}
 	})
 
-	// 「检查更新」：显示当前版本；有新版本时跳转下载，否则手动复检
+	// 「检查更新」：显示当前版本；有新版本时下载 zip 并替换
 	ver := tc.AppVersion
 	if ver == "" {
 		ver = "dev"
 	}
 	var updateLabel string
 	switch {
+	case tc.updateState.Downloading:
+		updateLabel = i18n.T("tray.update_downloading", tc.updateState.LatestVersion)
 	case tc.updateState.Checking:
-		updateLabel = fmt.Sprintf("正在检查更新… (v%s)", ver)
+		updateLabel = i18n.T("tray.update_checking", ver)
+	case tc.updateState.HasUpdate && tc.updateState.Error == "dmg":
+		updateLabel = i18n.T("tray.update_need_app_folder")
+	case tc.updateState.HasUpdate && tc.updateState.Error != "":
+		updateLabel = i18n.T("tray.update_failed", ver)
 	case tc.updateState.HasUpdate:
-		updateLabel = fmt.Sprintf("[新版本] v%s → 下载 (当前 v%s)", tc.updateState.LatestVersion, ver)
+		updateLabel = i18n.T("tray.update_available", tc.updateState.LatestVersion, ver)
 	default:
-		updateLabel = fmt.Sprintf("检查更新 (v%s)", ver)
+		updateLabel = i18n.T("tray.update_check", ver)
 	}
 	updateItem := fyne.NewMenuItem(updateLabel, func() {
-		if tc.updateState.HasUpdate {
-			openURL(releasesURL)
+		if tc.updateState.Downloading || tc.updateState.Checking {
 			return
 		}
-		if tc.updateState.Checking {
+		if tc.updateState.HasUpdate {
+			if !SupportsInPlaceUpdate(tc.AppVersion) {
+				openURL(releasesURL)
+				return
+			}
+			latest := tc.updateState.LatestVersion
+			tc.updateState.Downloading = true
+			tc.updateState.Error = ""
+			tc.rebuildMenu()
+			go func() {
+				err := ApplyInPlaceUpdate(tc.AppVersion, latest)
+				if err != nil {
+					log.Errorf("应用内更新失败: %v", err)
+					kind := err.Error()
+					if errors.Is(err, ErrRunFromDMG) {
+						kind = "dmg"
+					}
+					tc.SetUpdateState(UpdateState{
+						HasUpdate:     true,
+						LatestVersion: latest,
+						Error:         kind,
+					})
+					return
+				}
+				fyne.Do(func() {
+					tc.app.Quit()
+				})
+			}()
 			return
 		}
 		tc.updateState = UpdateState{Checking: true}
@@ -239,7 +273,7 @@ func (tc *TrayController) rebuildMenu() {
 		})
 	})
 
-	quitItem := fyne.NewMenuItem("退出", func() {
+	quitItem := fyne.NewMenuItem(i18n.T("tray.quit"), func() {
 		tc.app.Quit()
 	})
 	quitItem.IsQuit = true // 告知 Fyne 这是 Quit 项，阻止其再自动追加一个
@@ -262,6 +296,22 @@ func (tc *TrayController) rebuildMenu() {
 	}
 	tc.menu = fyne.NewMenu("NexusDesktop", menuItems...)
 	tc.deskApp.SetSystemTrayMenu(tc.menu)
+}
+
+// ApplyLanguage 按当前 i18n 重建托盘菜单与已打开的窗口。
+func (tc *TrayController) ApplyLanguage() {
+	if tc.deskApp == nil {
+		return
+	}
+	fyne.Do(func() {
+		tc.rebuildMenu()
+		if tc.settings != nil {
+			tc.settings.buildContent()
+		}
+		if tc.configWin != nil {
+			tc.configWin.retranslate()
+		}
+	})
 }
 
 func (tc *TrayController) updateIcon() {

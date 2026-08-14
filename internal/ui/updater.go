@@ -3,7 +3,14 @@
 package ui
 
 import (
+	"archive/zip"
+	"errors"
+	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -13,17 +20,28 @@ import (
 
 const (
 	// 官方「最新 Release」重定向端点（非 REST API，无速率限制、无需 Auth）。
-	releasesLatestURL = "https://github.com/bytepine/NexusDesktop/releases/latest"
-	releasesURL       = "https://github.com/bytepine/NexusDesktop/releases/latest"
-	tagPrefix         = "nexus-desktop-v"
+	releasesLatestURL  = "https://github.com/bytepine/NexusDesktop/releases/latest"
+	releasesURL        = "https://github.com/bytepine/NexusDesktop/releases/latest"
+	tagPrefix          = "nexus-desktop-v"
+	githubDownloadBase = "https://github.com/bytepine/NexusDesktop/releases/download/"
+)
+
+var (
+	// ErrRunFromDMG 当前从只读磁盘映像运行，无法覆盖 .app。
+	ErrRunFromDMG = errors.New("running from read-only disk image")
+	// ErrUnsupportedOS 当前平台不支持应用内替换。
+	ErrUnsupportedOS = errors.New("in-place update not supported on this OS")
+	// ErrDevBuild 开发构建不参与应用内替换。
+	ErrDevBuild = errors.New("dev build cannot apply in-place update")
 )
 
 // UpdateState 记录检查更新的结果。
 type UpdateState struct {
 	Checking      bool   // 正在检查中
+	Downloading   bool   // 正在下载/应用更新包
 	HasUpdate     bool   // 发现新版本（latest > current）
 	LatestVersion string // 最新版本号（不含前缀），如 "1.1.0"
-	Error         string // 非空表示检查失败（仅日志/调试用）
+	Error         string // 非空表示检查或应用失败（菜单/日志）
 }
 
 // CheckUpdate 异步检查 GitHub 最新 Release，完成后调用 onDone。
@@ -70,6 +88,180 @@ func checkUpdateSync(currentVersion string) UpdateState {
 	// 开发构建（未注入 -X）不参与比较提示；其余用 semver 判断是否有更新。
 	hasUpdate := current != "" && current != "dev" && IsNewerVersion(latest, current)
 	return UpdateState{HasUpdate: hasUpdate, LatestVersion: latest}
+}
+
+// SupportsInPlaceUpdate 是否走应用内 zip 替换（dev / 非 Win/Mac 为 false）。
+func SupportsInPlaceUpdate(currentVersion string) bool {
+	v := strings.TrimSpace(currentVersion)
+	if v == "" || v == "dev" {
+		return false
+	}
+	switch runtime.GOOS {
+	case "windows", "darwin":
+		return true
+	default:
+		return false
+	}
+}
+
+func updateZipURLFor(goos, version string) string {
+	v := strings.TrimSpace(version)
+	v = strings.TrimPrefix(v, "v")
+	v = strings.TrimPrefix(v, "V")
+	if v == "" {
+		return ""
+	}
+	tag := tagPrefix + v
+	switch goos {
+	case "windows":
+		return githubDownloadBase + tag + "/NexusDesktop-windows-amd64-v" + v + ".zip"
+	case "darwin":
+		return githubDownloadBase + tag + "/NexusDesktop-darwin-universal-v" + v + ".zip"
+	default:
+		return ""
+	}
+}
+
+func downloadUpdateZip(version, dest, userAgent string) error {
+	url := updateZipURLFor(runtime.GOOS, version)
+	if url == "" {
+		return ErrUnsupportedOS
+	}
+	log.Infof("下载更新包: %s", url)
+	client := &http.Client{Timeout: 5 * time.Minute}
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return err
+	}
+	if userAgent == "" {
+		userAgent = "NexusDesktop-UpdateChecker"
+	}
+	req.Header.Set("User-Agent", userAgent)
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("下载失败: HTTP %d", resp.StatusCode)
+	}
+	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+		return err
+	}
+	f, err := os.Create(dest)
+	if err != nil {
+		return err
+	}
+	_, copyErr := io.Copy(f, resp.Body)
+	closeErr := f.Close()
+	if copyErr != nil {
+		return copyErr
+	}
+	return closeErr
+}
+
+func zipSlipSafe(destDir, name string) (string, error) {
+	cleaned := filepath.Clean(name)
+	if filepath.IsAbs(cleaned) {
+		return "", fmt.Errorf("非法 zip 路径: %s", name)
+	}
+	target := filepath.Join(destDir, cleaned)
+	rel, err := filepath.Rel(destDir, target)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return "", fmt.Errorf("非法 zip 路径: %s", name)
+	}
+	return target, nil
+}
+
+func extractZip(zipPath, destDir string) error {
+	r, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
+		return err
+	}
+	for _, f := range r.File {
+		target, err := zipSlipSafe(destDir, f.Name)
+		if err != nil {
+			return err
+		}
+		mode := f.Mode()
+		if f.FileInfo().IsDir() {
+			if err := os.MkdirAll(target, 0o755); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
+		}
+		rc, err := f.Open()
+		if err != nil {
+			return err
+		}
+		out, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
+		if err != nil {
+			rc.Close()
+			return err
+		}
+		_, copyErr := io.Copy(out, rc)
+		closeErr := out.Close()
+		rc.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+		if closeErr != nil {
+			return closeErr
+		}
+	}
+	return nil
+}
+
+func findNamedFile(root, name string) (string, error) {
+	var found string
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		if strings.EqualFold(info.Name(), name) {
+			found = path
+			return io.EOF
+		}
+		return nil
+	})
+	if found != "" {
+		return found, nil
+	}
+	if err != nil && !errors.Is(err, io.EOF) {
+		return "", err
+	}
+	return "", fmt.Errorf("更新包中未找到 %s", name)
+}
+
+func findAppBundle(root string) (string, error) {
+	var found string
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() && strings.HasSuffix(strings.ToLower(info.Name()), ".app") {
+			found = path
+			return io.EOF
+		}
+		return nil
+	})
+	if found != "" {
+		return found, nil
+	}
+	if err != nil && !errors.Is(err, io.EOF) {
+		return "", err
+	}
+	return "", fmt.Errorf("更新包中未找到 .app")
 }
 
 // parseLatestTagFromURL 从 Release 落地页 URL 提取版本号（去掉 nexus-desktop-v / 前导 v）。
