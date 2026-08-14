@@ -1,6 +1,7 @@
 ﻿; NexusDesktop Windows 安装器（Inno Setup 7）
 ; AppId 是覆盖升级的唯一依据，发版后不得更改。
-#define AppIdGuid "{B8E4D6A2-3C71-4F9E-A5B0-1D7C8E9F2A34}"
+; [Setup] 里 {{ 转义为字面 { ，最终 AppId 为 {GUID}
+#define AppIdGuid "B8E4D6A2-3C71-4F9E-A5B0-1D7C8E9F2A34"
 #define MyAppName "NexusDesktop"
 #define MyAppPublisher "byteyang"
 #define MyAppURL "https://github.com/bytepine/NexusDesktop"
@@ -20,7 +21,7 @@
 #endif
 
 [Setup]
-AppId={#AppIdGuid}
+AppId={{{#AppIdGuid}}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} {#MyAppVersion}
@@ -89,7 +90,7 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChang
 
 [Code]
 const
-  UninstSubKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#AppIdGuid}_is1';
+  UninstSubKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{{#AppIdGuid}}_is1';
   RunKey = 'Software\Microsoft\Windows\CurrentVersion\Run';
   RunValueName = 'NexusDesktop';
 

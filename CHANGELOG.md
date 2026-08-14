@@ -18,7 +18,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - chore(release): Windows 发布产物改为仅 Setup.exe，不再打 zip 便携包
 
 ### Fixed
-- fix(installer): Inno Setup 7 将 Pascal `#13#10` 当成预处理器指令、将行首 `[...]` 当成 section tag，改为 `Chr(13)`/`Chr(10)` 并不再换行写数组
+- fix(installer): Inno Setup 7 将 Pascal `#13#10` 当成预处理器指令、将行首 `[...]` 当成 section tag；AppId 的 `{GUID}` 需写成 `{{GUID}`
 
 ## [1.0.6] - 2026-07-17
 
