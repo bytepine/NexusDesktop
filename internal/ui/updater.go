@@ -114,9 +114,9 @@ func updateZipURLFor(goos, version string) string {
 	tag := tagPrefix + v
 	switch goos {
 	case "windows":
-		return githubDownloadBase + tag + "/NexusDesktop-windows-amd64-v" + v + ".zip"
+		return githubDownloadBase + tag + "/NexusDesktop-windows-amd64-v" + v + "-update.zip"
 	case "darwin":
-		return githubDownloadBase + tag + "/NexusDesktop-darwin-universal-v" + v + ".zip"
+		return githubDownloadBase + tag + "/NexusDesktop-darwin-universal-v" + v + "-update.zip"
 	default:
 		return ""
 	}

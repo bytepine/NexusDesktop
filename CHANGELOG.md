@@ -5,6 +5,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed
+- chore(release): 更新包文件名改为 `*-update.zip`，与安装包（`-setup.exe` / `.dmg`）区分，避免手动下载装错
+
 ## [1.1.0] - 2026-08-14
 
 ### Added

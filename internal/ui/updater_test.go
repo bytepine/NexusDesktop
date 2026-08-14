@@ -51,12 +51,12 @@ func TestParseLatestTagFromURL(t *testing.T) {
 
 func TestUpdateZipURLFor(t *testing.T) {
 	win := updateZipURLFor("windows", "1.2.3")
-	wantWin := "https://github.com/bytepine/NexusDesktop/releases/download/nexus-desktop-v1.2.3/NexusDesktop-windows-amd64-v1.2.3.zip"
+	wantWin := "https://github.com/bytepine/NexusDesktop/releases/download/nexus-desktop-v1.2.3/NexusDesktop-windows-amd64-v1.2.3-update.zip"
 	if win != wantWin {
 		t.Errorf("windows url = %q, want %q", win, wantWin)
 	}
 	mac := updateZipURLFor("darwin", "1.2.3")
-	wantMac := "https://github.com/bytepine/NexusDesktop/releases/download/nexus-desktop-v1.2.3/NexusDesktop-darwin-universal-v1.2.3.zip"
+	wantMac := "https://github.com/bytepine/NexusDesktop/releases/download/nexus-desktop-v1.2.3/NexusDesktop-darwin-universal-v1.2.3-update.zip"
 	if mac != wantMac {
 		t.Errorf("darwin url = %q, want %q", mac, wantMac)
 	}

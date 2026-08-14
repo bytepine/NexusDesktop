@@ -34,6 +34,7 @@ Get the latest release from [Releases](https://github.com/bytepine/NexusDesktop/
 
 - **Windows**: `NexusDesktop-windows-amd64-v<version>-setup.exe` — installer; uninstall from Apps & features
 - **macOS**: `NexusDesktop-darwin-universal.dmg` — Universal Binary (Intel + Apple Silicon)
+- Do not download `*-update.zip` — that is for in-app updates, not first-time install
 
 ### Windows install & uninstall
 
@@ -56,10 +57,10 @@ When the tray “Check for updates” item finds a newer release, it downloads t
 
 | Platform | Installer | Update package |
 |----------|-----------|----------------|
-| Windows | `NexusDesktop-windows-amd64-v<version>-setup.exe` | `NexusDesktop-windows-amd64-v<version>.zip` (contains `NexusDesktop.exe`) |
-| macOS | `NexusDesktop-darwin-universal.dmg` | `NexusDesktop-darwin-universal-v<version>.zip` (contains `NexusDesktop.app`) |
+| Windows | `NexusDesktop-windows-amd64-v<version>-setup.exe` | `NexusDesktop-windows-amd64-v<version>-update.zip` (contains `NexusDesktop.exe`) |
+| macOS | `NexusDesktop-darwin-universal.dmg` | `NexusDesktop-darwin-universal-v<version>-update.zip` (contains `NexusDesktop.app`) |
 
-- The zip is **not** a portable install; first-time install still uses Setup.exe / DMG
+- `*-update.zip` is **not** a portable install; first-time install still uses Setup.exe / DMG
 - **macOS**: drag the `.app` into `Applications` first; updating while running from the DMG will fail
 - Replacing a copy under `Program Files` prompts for administrator permission once
 - Version checks use the running app; Windows also refreshes the Apps & features display version

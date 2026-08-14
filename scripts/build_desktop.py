@@ -17,9 +17,9 @@ build_desktop.py — NexusDesktop 跨平台构建脚本
         - Windows 隐藏控制台窗口（-H=windowsgui）
         - -s -w 裁剪符号，减小体积
         - Windows 产物：NexusDesktop-windows-amd64-v<ver>-setup.exe（安装包，需 Inno Setup 7）
-                       + NexusDesktop-windows-amd64-v<ver>.zip（更新包，内含 exe）
+                       + NexusDesktop-windows-amd64-v<ver>-update.zip（更新包，内含 exe）
         - macOS 产物：NexusDesktop-darwin-universal.dmg（安装包）
-                     + NexusDesktop-darwin-universal-v<ver>.zip（更新包，内含 .app）
+                     + NexusDesktop-darwin-universal-v<ver>-update.zip（更新包，内含 .app）
 
 平台要求：
     Windows : GCC 14.x（如 w64devkit v1.23.0）。
@@ -294,7 +294,7 @@ def _embed_windows_resources(root: str, go: str, env: dict, version: str) -> str
 
 def _zip_windows_update(exe_path: str, output_dir: str, version: str) -> str:
     """把 NexusDesktop.exe 打进版本化 zip 更新包。"""
-    zip_path = os.path.join(output_dir, f"NexusDesktop-windows-amd64-v{version}.zip")
+    zip_path = os.path.join(output_dir, f"NexusDesktop-windows-amd64-v{version}-update.zip")
     if os.path.isfile(zip_path):
         os.remove(zip_path)
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
@@ -643,7 +643,7 @@ def _package_macos_app(
         f.write(plist)
 
     if is_release:
-        zip_name = f"NexusDesktop-darwin-{arch}-v{version}.zip"
+        zip_name = f"NexusDesktop-darwin-{arch}-v{version}-update.zip"
         _zip_macos_app(app_dir, os.path.join(output_dir, zip_name))
 
     # 打 DMG（含 Applications 快捷方式，支持拖拽安装）

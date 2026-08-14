@@ -34,6 +34,7 @@ NexusDesktop 是一个**独立的本地 MCP 中转程序**，无需安装 IDE �
 
 - **Windows**：`NexusDesktop-windows-amd64-v<版本号>-setup.exe` — 安装向导，可从系统「应用和功能」卸载
 - **macOS**：`NexusDesktop-darwin-universal.dmg`（Universal Binary，支持 Intel + Apple Silicon）
+- 不要下载 `*-update.zip`：那是应用内更新用的，不是安装包
 
 ### Windows 安装与卸载
 
@@ -56,10 +57,10 @@ NexusDesktop 是一个**独立的本地 MCP 中转程序**，无需安装 IDE �
 
 | 平台 | 安装包 | 更新包 |
 |------|--------|--------|
-| Windows | `NexusDesktop-windows-amd64-v<版本>-setup.exe` | `NexusDesktop-windows-amd64-v<版本>.zip`（内含 `NexusDesktop.exe`） |
-| macOS | `NexusDesktop-darwin-universal.dmg` | `NexusDesktop-darwin-universal-v<版本>.zip`（内含 `NexusDesktop.app`） |
+| Windows | `NexusDesktop-windows-amd64-v<版本>-setup.exe` | `NexusDesktop-windows-amd64-v<版本>-update.zip`（内含 `NexusDesktop.exe`） |
+| macOS | `NexusDesktop-darwin-universal.dmg` | `NexusDesktop-darwin-universal-v<版本>-update.zip`（内含 `NexusDesktop.app`） |
 
-- zip **不是**便携安装包；首次安装请用 Setup.exe / DMG
+- `*-update.zip` **不是**便携安装包；首次安装请用 Setup.exe / DMG
 - **macOS**：须先把 `.app` 拖入 `Applications` 再更新；直接从 DMG 运行会失败
 - 安装到 `Program Files` 时，替换文件会请求一次管理员权限
 - 版本以运行中的应用为准；Windows 会同步「应用和功能」里的显示版本
