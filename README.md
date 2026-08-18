@@ -2,18 +2,9 @@
 
 **Language / 语言**: 简体中文 · [English](README.en.md)
 
----
+独立的本地 MCP **中转程序**：无需 IDE 插件，双击运行后在系统托盘（macOS 菜单栏）常驻，发现本机 Unreal Engine 实例并经 WebSocket 转发工具调用。能力由 UE 侧 **NexusLink** 提供。
 
-NexusDesktop 是一个**独立的本地 MCP 中转程序**，无需安装 IDE 插件即可使用：双击运行，在系统托盘（macOS 菜单栏）常驻，AI 客户端通过 MCP HTTP 协议连接，程序自动发现本地 Unreal Engine 实例并经 WebSocket 转发工具调用。
-
-与 IDE 插件方案对比：
-
-| 接入方式 | 端点 | 适用 |
-|----------|------|------|
-| **NexusDesktop**（本程序） | `http://127.0.0.1:6700/stream` | 无需 IDE 插件；任意 AI 客户端；双击启动 |
-| nexus-vscode | `http://127.0.0.1:6900/stream` | VSCode / Cursor 扩展 |
-| nexus-rider | `http://127.0.0.1:6800/stream` | JetBrains Rider 插件 |
-| 直连 UE | `http://127.0.0.1:45000/stream` | 需手动指定 UE 端口 |
+四端端口与开关层数见 [NexusLink 使用指南](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.md)。本程序是 **两层** 开关中的客户端层（UE 启用 MCP + 托盘启用中转）。
 
 ---
 
@@ -22,81 +13,75 @@ NexusDesktop 是一个**独立的本地 MCP 中转程序**，无需安装 IDE �
 | 组件 | 要求 |
 |------|------|
 | **NexusDesktop** | 下载 Setup.exe / `.dmg`，无需 Go / Node / 运行时 |
-| **NexusLink**（UE 插件） | [NexusLink Releases](https://github.com/bytepine/NexusLink/releases)；UE 4.26+ |
+| **NexusLink** | [NexusLink Releases](https://github.com/bytepine/NexusLink/releases)；UE 4.26+ |
 | **Windows** | Windows 10 / 11（amd64） |
 | **macOS** | macOS 12+（Monterey）；Intel / Apple Silicon 通用 |
 
 ---
 
-## 下载
+## 下载与安装
 
-从 [Releases](https://github.com/bytepine/NexusDesktop/releases) 下载最新版本：
+从 [Releases](https://github.com/bytepine/NexusDesktop/releases) 下载：
 
-- **Windows**：`NexusDesktop-windows-amd64-v<版本号>-setup.exe` — 安装向导，可从系统「应用和功能」卸载
-- **macOS**：`NexusDesktop-darwin-universal.dmg`（Universal Binary，支持 Intel + Apple Silicon）
-- 不要下载 `*-update.zip`：那是应用内更新用的，不是安装包
+- **Windows**：`NexusDesktop-windows-amd64-v<版本号>-setup.exe` — 安装向导，可从「应用和功能」卸载
+- **macOS**：`NexusDesktop-darwin-universal.dmg`（Universal Binary）
+- **不要下载 `*-update.zip`**：那是应用内更新包，不是安装包
 
 ### Windows 安装与卸载
 
-安装范围仿 Python.org 安装器，默认目录随范围变化：
+安装范围仿 Python.org 安装器：
 
 | 范围 | 权限 | 默认目录 |
 |------|------|----------|
 | 当前用户（默认） | 无需管理员 | `%LOCALAPPDATA%\Programs\NexusDesktop` |
 | 全部用户 | 需 UAC | `C:\Program Files\NexusDesktop` |
 
-- 检测到已安装的旧版时**原地升级**（沿用上次目录与范围，配置/日志保留）
-- 若已通过应用内更新装上**更新**的版本，再运行旧 Setup 会被拒绝，避免降级
-- 若要在「当前用户」与「全部用户」之间切换，请先卸载再安装
-- **卸载**：Windows 设置 → 应用 → NexusDesktop；可选择是否删除当前用户配置（`%APPDATA%\NexusDesktop`）
+- 已安装旧版时**原地升级**（沿用目录与范围，配置/日志保留）
+- 若已通过应用内更新装上**更新**的版本，再运行旧 Setup 会被拒绝
+- 在「当前用户」与「全部用户」之间切换：先卸载再安装
+- **卸载**：Windows 设置 → 应用 → NexusDesktop；可选删除 `%APPDATA%\NexusDesktop`
 - 配置/日志始终在 `%APPDATA%\NexusDesktop`，与安装范围无关
 
 ### 应用内更新
 
-托盘「检查更新」发现新版本后，按该版本号下载 GitHub Release 上的 **zip 更新包**（不是安装包），解压后覆盖当前安装并重启：
+托盘「检查更新」按版本号下载 GitHub Release 上的 **zip 更新包**（不是安装包），解压覆盖后重启：
 
 | 平台 | 安装包 | 更新包 |
 |------|--------|--------|
-| Windows | `NexusDesktop-windows-amd64-v<版本>-setup.exe` | `NexusDesktop-windows-amd64-v<版本>-update.zip`（内含 `NexusDesktop.exe`） |
-| macOS | `NexusDesktop-darwin-universal.dmg` | `NexusDesktop-darwin-universal-v<版本>-update.zip`（内含 `NexusDesktop.app`） |
+| Windows | `*-setup.exe` | `*-update.zip`（内含 `NexusDesktop.exe`） |
+| macOS | `.dmg` | `*-update.zip`（内含 `NexusDesktop.app`） |
 
-- `*-update.zip` **不是**便携安装包；首次安装请用 Setup.exe / DMG
 - **macOS**：须先把 `.app` 拖入 `Applications` 再更新；直接从 DMG 运行会失败
-- 安装到 `Program Files` 时，替换文件会请求一次管理员权限
-- 版本以运行中的应用为准；Windows 会同步「应用和功能」里的显示版本
+- 安装到 `Program Files` 时替换文件会请求一次管理员权限
 
 ---
 
 ## 使用
 
-### 1. UE 前置条件
+### 1. UE 前置
 
-1. 从 [NexusLink Releases](https://github.com/bytepine/NexusLink/releases) 下载 `nexus-mcp-unreal-*.zip`，解压到 `Plugins/Developer/NexusLink`
-2. UE：**Edit → Plugins → Developer → NexusLink** — 启用插件
-3. UE：**Edit → Editor Preferences → Plugins → NexusLink** — 勾选 **启用 MCP 服务器**
+安装并启用 NexusLink，勾选 **启用 MCP 服务器**（步骤见 [usage-guide §2](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.md)）。
 
-### 2. 启动 NexusDesktop
+### 2. 启动
 
-**Windows**：Setup 安装后从开始菜单启动，程序进入系统托盘。
+**Windows**：Setup 后从开始菜单启动，进入系统托盘。
 
-**macOS**：打开 `NexusDesktop-darwin-universal.dmg`，将 `NexusDesktop.app` 拖入 `Applications`，双击启动。程序不会出现在 Dock，仅在菜单栏（系统托盘）常驻。
+**macOS**：打开 dmg，将 `NexusDesktop.app` 拖入 `Applications` 后启动。不出现在 Dock，仅菜单栏常驻。
 
-托盘菜单功能：
-
-| 菜单项 | 说明 |
-|--------|------|
-| 状态行 | 显示当前 UE 连接状态（项目名 / 未连接） |
-| 选择 UE 实例 | 切换到指定 UE 实例 |
-| 扫描 UE 实例 | 主动触发一次端口扫描 |
-| ✓ 启用中转服务器 | 启停 MCP HTTP 监听（默认 `:6700`） |
-| 复制 MCP 客户端配置 | 复制 JSON 到剪贴板 |
-| 检查更新 | 查询最新 Release；发现新版本时下载 zip 更新包，覆盖安装目录后自动重启 |
+| 托盘菜单 | 说明 |
+|----------|------|
+| 状态行 | 当前 UE 连接（项目名 / 未连接） |
+| 选择 UE 实例 | 切换实例 |
+| 扫描 UE 实例 | 主动扫端口 |
+| ✓ 启用中转服务器 | 启停 MCP HTTP（默认 `:6700`） |
+| 复制 MCP 客户端配置 | 复制 JSON |
+| 检查更新 | 下载 zip 更新包并重启 |
 | 设置… | 打开设置窗口 |
-| 打开日志目录 | 打开日志目录 |
-| 开机自启 | 切换开机自启 |
+| 打开日志目录 | 打开日志 |
+| 开机自启 | 切换 |
 | 退出 | 退出程序 |
 
-### 3. 配置 AI 客户端
+### 3. AI 客户端
 
 **Cursor**（`~/.cursor/mcp.json`）：
 
@@ -110,101 +95,44 @@ NexusDesktop 是一个**独立的本地 MCP 中转程序**，无需安装 IDE �
 }
 ```
 
-**CodeBuddy / Windsurf**：
-
-```json
-"Nexus": {
-  "url": "http://127.0.0.1:6700/stream",
-  "transportType": "streamable-http"
-}
-```
-
 ### 4. 设置窗口
 
-双击托盘图标或点击「设置…」打开配置界面：
+双击托盘图标或「设置…」。关闭窗口只藏回托盘，不退出。
 
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
 | 启用中转服务器 | 开 | 总开关 |
-| MCP HTTP 端口 | 6700 | AI 客户端连接端口 |
-| UE 扫描起始端口 | 45000 | UE 实例扫描范围 |
-| UE 扫描结束端口 | 45100 | UE 实例扫描范围 |
-| 扫描间隔（秒） | 5 | 定时重新发现间隔 |
-| 界面语言 | 跟随系统 | 简体中文 / English；可手动切换 |
-
-关闭窗口仅隐藏回托盘，不退出程序。
-
----
-
-## 架构
-
-```
-AI 客户端 ──POST /stream──► MCP HTTP Server (:6700)
-                                    │
-                             Dispatcher (JSON-RPC 2.0)
-                                    │
-                          UnrealManager (发现 + WS)
-                                    │
-                     ◄──── WebSocket JSON-RPC ──────► UE NexusLink
-```
+| MCP HTTP 端口 | 6700 | AI 客户端端口 |
+| UE 扫描起始 / 结束端口 | 45000 / 45100 | 发现范围 |
+| 扫描间隔（秒） | 5 | 定时发现 |
+| 界面语言 | 跟随系统 | 简体中文 / English |
 
 ---
 
 ## 本地构建
 
-### 依赖
-
 - Go 1.25+
 - GCC / MinGW-w64（Windows）或 Xcode CLI（macOS）— Fyne 需要 CGO
 
-### Windows
+**Windows**：
 
 ```powershell
 $env:CGO_ENABLED = "1"
 go build -ldflags "-H=windowsgui -s -w" -o NexusDesktop.exe ./cmd/nexusdesktop/
 ```
 
-或使用一键脚本：
+或 `build.bat`。GCC 16+（binutils 2.46+）产生 BigOBJ，Go CGO 暂不支持；用 GCC 14.x（如 [w64devkit v1.23.0](https://github.com/skeeto/w64devkit/releases/tag/v1.23.0)）。release 安装包另需 [Inno Setup 7](https://jrsoftware.org/isdl.php)。
 
-```bat
-build.bat
-```
-
-### macOS
-
-一键构建 Universal Binary DMG（arm64 + amd64）：
+**macOS**：
 
 ```bash
 python3 scripts/build_desktop.py --build-type develop
-# 或 release 包
-python3 scripts/build_desktop.py --build-type release --arch universal
+# release：python3 scripts/build_desktop.py --build-type release --arch universal
 ```
 
-或使用快捷脚本：
+或 `./build.command`。
 
-```bash
-./build.command
-```
-
-手动构建：
-
-```bash
-# 当前架构
-CGO_ENABLED=1 go build -ldflags "-s -w" -o NexusDesktop ./cmd/nexusdesktop/
-
-# Universal Binary（需 lipo）
-CGO_ENABLED=1 GOARCH=arm64 go build -o NexusDesktop-arm64 ./cmd/nexusdesktop/
-CGO_ENABLED=1 GOARCH=amd64 go build -o NexusDesktop-amd64 ./cmd/nexusdesktop/
-lipo -create -output NexusDesktop NexusDesktop-arm64 NexusDesktop-amd64
-```
-
-> **注意（Windows）**：GCC 16+ (binutils 2.46+) 产生 BigOBJ 格式，Go CGO 暂不支持。推荐使用 GCC 14.x（如 [w64devkit v1.23.0](https://github.com/skeeto/w64devkit/releases/tag/v1.23.0)）。release 安装包另需 [Inno Setup 7](https://jrsoftware.org/isdl.php)（`winget install JRSoftware.InnoSetup.7`）。
-
----
-
-## 变更记录
-
-见 [CHANGELOG.md](CHANGELOG.md)。
+功能变更写入 [CHANGELOG.md](CHANGELOG.md) `[Unreleased]`。tag 前缀：`nexus-desktop-v`。
 
 ---
 
