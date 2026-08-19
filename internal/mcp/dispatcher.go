@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/bytepine/NexusDesktop/internal/log"
+	"github.com/bytepine/NexusDesktop/internal/proxy"
 	"github.com/bytepine/NexusDesktop/internal/unreal"
 )
 
@@ -27,8 +28,8 @@ const (
 )
 
 const (
-	protocolVersion   = "2025-06-18"
-	serverName        = "Nexus-Desktop"
+	protocolVersion    = "2025-06-18"
+	serverName         = "Nexus-Desktop"
 	initializeWarmupMs = 2000 * time.Millisecond
 )
 
@@ -137,10 +138,7 @@ func (d *Dispatcher) handleInitialize(id interface{}, params map[string]interfac
 	}
 
 	proxyCfg := d.manager.GetProxyConfig()
-	connNote := "(Connected via NexusDesktop.)"
-	if !d.manager.IsWsOpen() {
-		connNote = "(UE not connected — call list_unreal_instances + connect_unreal_instance when needed.)"
-	}
+	connNote := "(Via NexusDesktop. Connection: trust tools/list — UE tools present ⇒ connected; else list_unreal_instances + connect_unreal_instance.)"
 	instructions := proxyCfg.InitializePrefix + "\n" + connNote
 	if upstream != "" {
 		instructions += "\n\n--- Upstream (Unreal) ---\n" + upstream
@@ -216,8 +214,23 @@ func (d *Dispatcher) handleToolsCall(id interface{}, params map[string]interface
 		}
 	}
 
-	// 解析可选 targetPort（一次性路由不改变长连接绑定）
 	args, _ := params["arguments"].(map[string]interface{})
+	callInfo := proxy.ParseCall(toolName, args)
+	hub := d.manager.Hub
+	hub.WaitIfPaused()
+	if hub.ConfirmIfNeeded(callInfo) == proxy.DecisionDeny {
+		return makeErrorWithData(id, errInternalError, "Write blocked by proxy gate (user denied).",
+			map[string]interface{}{"errorKind": "proxy_denied"}), nil
+	}
+	hub.BeginCall(callInfo)
+	defer hub.EndCall()
+
+	now := time.Now().UnixMilli()
+	if hit := hub.LookupFresh(callInfo, now); hit != nil {
+		return makeResult(id, proxy.WrapCached(hit.Result, hit.Kind, hit.SnapshotAt)), nil
+	}
+
+	// 解析可选 targetPort（一次性路由不改变长连接绑定）
 	forwardParams := cloneMap(params)
 	targetPort := -1
 	if args != nil {
@@ -235,6 +248,9 @@ func (d *Dispatcher) handleToolsCall(id interface{}, params map[string]interface
 		outcome = d.manager.ForwardToolCallToPort(targetPort, forwardParams)
 	} else {
 		if !d.manager.EnsureLongConnection() {
+			if snap := hub.LookupDegraded(callInfo, now); snap != nil {
+				return makeResult(id, proxy.WrapDegraded(snap.Result, snap.SnapshotAt)), nil
+			}
 			return makeError(id, errInternalError, proxyCfg.ErrorMessages.NotConnected), nil
 		}
 		outcome = d.manager.ForwardToolCall(forwardParams)
@@ -247,6 +263,9 @@ func (d *Dispatcher) handleToolsCall(id interface{}, params map[string]interface
 
 	switch outcome.Status {
 	case "disconnected":
+		if snap := hub.LookupDegraded(callInfo, now); snap != nil {
+			return makeResult(id, proxy.WrapDegraded(snap.Result, snap.SnapshotAt)), nil
+		}
 		d.manager.EnqueueProxyFeedback(unreal.ProxyFeedbackEvent{
 			Category:  unreal.ProxyFeedbackDisconnect,
 			Tool:      toolName,
@@ -270,7 +289,7 @@ func (d *Dispatcher) handleToolsCall(id interface{}, params map[string]interface
 
 	resp := outcome.Response
 	if result, ok := resp["result"]; ok {
-		return makeResult(id, result), nil
+		return makeResult(id, hub.Store(callInfo, result, now)), nil
 	}
 	if errObj, ok := resp["error"].(map[string]interface{}); ok {
 		code := errInternalError

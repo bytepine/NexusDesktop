@@ -25,6 +25,8 @@ type Config struct {
 	ScanPortEnd   int `json:"scanPortEnd"`
 	// ScanIntervalSeconds 是定时发现 UE 实例的间隔秒数（默认 5）。
 	ScanIntervalSeconds int `json:"scanIntervalSeconds"`
+	// WriteGate 写操作门控：off / destructive / all。
+	WriteGate string `json:"writeGate"`
 	// Language 是界面语言：auto（跟随系统，默认）、zh-CN、en。
 	Language string `json:"language"`
 }
@@ -37,6 +39,7 @@ func DefaultConfig() Config {
 		ScanPortStart:       45000,
 		ScanPortEnd:         45100,
 		ScanIntervalSeconds: 5,
+		WriteGate:           "destructive",
 		Language:            "auto",
 	}
 }
@@ -144,6 +147,11 @@ func sanitize(c *Config) {
 	}
 	if c.ScanIntervalSeconds < 1 {
 		c.ScanIntervalSeconds = 5
+	}
+	switch c.WriteGate {
+	case "off", "destructive", "all":
+	default:
+		c.WriteGate = "destructive"
 	}
 	switch c.Language {
 	case "", "auto", "zh-CN", "en":

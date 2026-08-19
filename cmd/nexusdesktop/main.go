@@ -24,6 +24,7 @@ import (
 	"github.com/bytepine/NexusDesktop/internal/i18n"
 	nlog "github.com/bytepine/NexusDesktop/internal/log"
 	"github.com/bytepine/NexusDesktop/internal/mcp"
+	"github.com/bytepine/NexusDesktop/internal/proxy"
 	"github.com/bytepine/NexusDesktop/internal/ui"
 	"github.com/bytepine/NexusDesktop/internal/unreal"
 )
@@ -54,6 +55,7 @@ func main() {
 	mgr := unreal.NewManager()
 	mgr.ScanPortStart = cfg.ScanPortStart
 	mgr.ScanPortEnd = cfg.ScanPortEnd
+	mgr.Hub.SetWriteGate(proxy.ParseWriteGate(cfg.WriteGate))
 
 	// Fyne 应用（主 UI 入口）
 	fyneApp := app.NewWithID("com.bytepine.nexusdesktop")
@@ -64,6 +66,8 @@ func main() {
 	var tray *ui.TrayController
 	tray = ui.NewTrayController(fyneApp, mgr)
 	tray.AppVersion = appVersion
+	mgr.Hub.OnActivity = func() { tray.Refresh() }
+	mgr.Hub.SetPrompter(tray.PromptGate)
 
 	// macOS：在事件循环就绪（applicationDidFinishLaunching: 之后）再压一次 Accessory 策略，
 	// 覆盖 Fyne driver 默认设置的 Regular 策略，确保 Dock 不出现图标。
@@ -208,6 +212,7 @@ func main() {
 		i18n.Apply(c.Language)
 		mgr.ScanPortStart = c.ScanPortStart
 		mgr.ScanPortEnd = c.ScanPortEnd
+		mgr.Hub.SetWriteGate(proxy.ParseWriteGate(c.WriteGate))
 		if c.Enabled {
 			startScanTimer()
 		}

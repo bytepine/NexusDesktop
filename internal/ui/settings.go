@@ -13,6 +13,7 @@ import (
 	"github.com/bytepine/NexusDesktop/internal/config"
 	"github.com/bytepine/NexusDesktop/internal/i18n"
 	"github.com/bytepine/NexusDesktop/internal/log"
+	"github.com/bytepine/NexusDesktop/internal/proxy"
 	"github.com/bytepine/NexusDesktop/internal/unreal"
 )
 
@@ -75,6 +76,17 @@ func (sw *SettingsWindow) buildContent() {
 	scanIntervalEntry := widget.NewEntry()
 	scanIntervalEntry.SetText(fmt.Sprintf("%d", cfg.ScanIntervalSeconds))
 	scanIntervalEntry.SetPlaceHolder(i18n.T("settings.placeholder", 5))
+
+	gateOpts := []string{i18n.T("settings.gate_off"), i18n.T("settings.gate_destructive"), i18n.T("settings.gate_all")}
+	gateSelect := widget.NewSelect(gateOpts, nil)
+	switch cfg.WriteGate {
+	case "off":
+		gateSelect.SetSelected(gateOpts[0])
+	case "all":
+		gateSelect.SetSelected(gateOpts[2])
+	default:
+		gateSelect.SetSelected(gateOpts[1])
+	}
 
 	// ---- 界面语言：立即生效并落盘 ----
 	langOpts := i18n.SelectOptions()
@@ -153,12 +165,21 @@ func (sw *SettingsWindow) buildContent() {
 		newCfg.ScanPortStart = scanStart
 		newCfg.ScanPortEnd = scanEnd
 		newCfg.ScanIntervalSeconds = interval
+		switch gateSelect.Selected {
+		case i18n.T("settings.gate_off"):
+			newCfg.WriteGate = "off"
+		case i18n.T("settings.gate_all"):
+			newCfg.WriteGate = "all"
+		default:
+			newCfg.WriteGate = "destructive"
+		}
 		if err := config.Save(newCfg); err != nil {
 			statusLabel.SetText(i18n.T("settings.save_failed", err.Error()))
 			log.Errorf("设置保存失败: %v", err)
 			return
 		}
 		statusLabel.SetText(i18n.T("settings.saved"))
+		sw.manager.Hub.SetWriteGate(proxy.ParseWriteGate(newCfg.WriteGate))
 		if sw.tray != nil {
 			sw.tray.Refresh()
 		}
@@ -181,6 +202,8 @@ func (sw *SettingsWindow) buildContent() {
 			scanEndEntry,
 			widget.NewLabel(i18n.T("settings.scan_interval")),
 			scanIntervalEntry,
+			widget.NewLabel(i18n.T("settings.write_gate")),
+			gateSelect,
 			widget.NewLabel(i18n.T("settings.language")),
 			langSelect,
 		),

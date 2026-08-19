@@ -20,19 +20,20 @@ import (
 	"time"
 
 	"github.com/bytepine/NexusDesktop/internal/log"
+	"github.com/bytepine/NexusDesktop/internal/proxy"
 	"github.com/gorilla/websocket"
 )
 
 const (
-	toolsCallTimeoutMs     = 120_000 * time.Millisecond
-	wsLightRequestTimeout  = toolsCallTimeoutMs
-	wsKeepaliveIdleMs      = 15_000 * time.Millisecond
-	wsKeepaliveBusyMs      = 5_000 * time.Millisecond
-	scanConcurrency        = 20
-	fullScanEveryNTicks    = 6
-	probeMaxBytes          = 65_536
-	probeTimeout           = 1 * time.Second
-	wsHandshakeTimeout     = 3 * time.Second
+	toolsCallTimeoutMs    = 120_000 * time.Millisecond
+	wsLightRequestTimeout = toolsCallTimeoutMs
+	wsKeepaliveIdleMs     = 15_000 * time.Millisecond
+	wsKeepaliveBusyMs     = 5_000 * time.Millisecond
+	scanConcurrency       = 20
+	fullScanEveryNTicks   = 6
+	probeMaxBytes         = 65_536
+	probeTimeout          = 1 * time.Second
+	wsHandshakeTimeout    = 3 * time.Second
 )
 
 // WsRequestResult 区分正常响应、断连与超时三种结果。
@@ -67,9 +68,9 @@ type Manager struct {
 	connectionEpoch        int64
 	idCounter              int64
 
-	cachedToolsList   []interface{}
+	cachedToolsList      []interface{}
 	upstreamInstructions string
-	cachedProxyConfig *ProxyConfig
+	cachedProxyConfig    *ProxyConfig
 
 	pendingRequests map[int64]chan WsRequestResult
 
@@ -82,9 +83,12 @@ type Manager struct {
 	discoveryInFlight chan struct{} // 非 nil 表示有扫描在进行
 
 	// 事件回调（非阻塞调用，调用方需在 goroutine 内注册）
-	OnConnectionChanged  func(port int)
-	OnToolsChanged       func()
-	OnInstancesChanged   func() // 实例列表内容发生变化时触发
+	OnConnectionChanged func(port int)
+	OnToolsChanged      func()
+	OnInstancesChanged  func() // 实例列表内容发生变化时触发
+
+	// Hub 代理会话层（TTL 缓存 / Pause / 写门控）。
+	Hub *proxy.Hub
 
 	// proxyFeedback 代理层转发失败（断连/超时/连接失败）的进程内缓冲，供 nexus/proxy_feedback 上报给 UE。
 	proxyFeedback *proxyFeedbackBuffer
@@ -122,6 +126,7 @@ func NewManager() *Manager {
 		pendingRequests: make(map[int64]chan WsRequestResult),
 		requestChain:    make(chan struct{}, 1),
 		proxyFeedback:   newProxyFeedbackBuffer(),
+		Hub:             proxy.NewHub(),
 	}
 	m.requestChain <- struct{}{} // 初始令牌
 	return m

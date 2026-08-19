@@ -11,12 +11,15 @@ import (
 	"runtime"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/theme"
+	"fyne.io/fyne/v2/widget"
 
 	"github.com/bytepine/NexusDesktop/internal/config"
 	"github.com/bytepine/NexusDesktop/internal/i18n"
 	"github.com/bytepine/NexusDesktop/internal/log"
+	"github.com/bytepine/NexusDesktop/internal/proxy"
 	"github.com/bytepine/NexusDesktop/internal/unreal"
 )
 
@@ -128,6 +131,20 @@ func (tc *TrayController) rebuildMenu() {
 	} else {
 		statusLabel = i18n.T("tray.status_disconnected")
 	}
+	if snapAct := tc.manager.Hub.Activity(); snapAct != nil {
+		if snapAct.Paused {
+			statusLabel = i18n.T("tray.pause_agent")
+		} else if snapAct.Capability != "" {
+			label := snapAct.Capability
+			if snapAct.Identity != "" {
+				label += " " + snapAct.Identity
+			}
+			if len(label) > 40 {
+				label = label[:40] + "…"
+			}
+			statusLabel = i18n.T("tray.activity", label)
+		}
+	}
 
 	// 实例子菜单
 	instances := snap.Instances
@@ -212,6 +229,15 @@ func (tc *TrayController) rebuildMenu() {
 		}
 	})
 
+	pauseLabel := i18n.T("tray.pause_agent")
+	if tc.manager.Hub.IsPaused() {
+		pauseLabel = i18n.T("tray.resume_agent")
+	}
+	pauseItem := fyne.NewMenuItem(pauseLabel, func() {
+		tc.manager.Hub.SetPaused(!tc.manager.Hub.IsPaused())
+		tc.Refresh()
+	})
+
 	// 「检查更新」：显示当前版本；有新版本时下载 zip 并替换
 	ver := tc.AppVersion
 	if ver == "" {
@@ -287,6 +313,7 @@ func (tc *TrayController) rebuildMenu() {
 		serverToggle,
 		instancesMenu,
 		scanItem,
+		pauseItem,
 		disconnectItem,
 		fyne.NewMenuItemSeparator(),
 		copyConfig,
@@ -323,6 +350,26 @@ func (tc *TrayController) updateIcon() {
 	} else {
 		tc.deskApp.SetSystemTrayIcon(theme.InfoIcon()) // 未连接，待机
 	}
+}
+
+// PromptGate 弹出写操作确认窗（Allow / Deny / Always），供 SessionHub 回调。
+func (tc *TrayController) PromptGate(info proxy.CallInfo) proxy.GateDecision {
+	ch := make(chan proxy.GateDecision, 1)
+	suffix := ""
+	if info.Identity != "" {
+		suffix = " → " + info.Identity
+	}
+	fyne.Do(func() {
+		w := tc.app.NewWindow(i18n.T("gate.title"))
+		msg := widget.NewLabel(i18n.T("gate.message", info.Capability, suffix))
+		allow := widget.NewButton(i18n.T("gate.allow"), func() { ch <- proxy.DecisionAllow; w.Close() })
+		deny := widget.NewButton(i18n.T("gate.deny"), func() { ch <- proxy.DecisionDeny; w.Close() })
+		always := widget.NewButton(i18n.T("gate.always"), func() { ch <- proxy.DecisionAlways; w.Close() })
+		w.SetContent(container.NewVBox(msg, container.NewHBox(allow, deny, always)))
+		w.Resize(fyne.NewSize(480, 140))
+		w.Show()
+	})
+	return <-ch
 }
 
 // openURL 用系统默认浏览器打开 URL。

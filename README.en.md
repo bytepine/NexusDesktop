@@ -73,6 +73,7 @@ Install and enable NexusLink, then check **Enable MCP Server** ([usage-guide §2
 | Status line | UE connection (project name / disconnected) |
 | Select UE instance | Switch instance |
 | Scan UE instances | Manual port scan |
+| Pause / resume agent forwarding | Queue remote calls at the proxy |
 | ✓ Enable proxy | Toggle MCP HTTP (default `:6700`) |
 | Copy MCP client config | Copy JSON |
 | Check for updates | Download zip update and restart |
@@ -105,6 +106,7 @@ Double-click the tray icon or **Settings…**. Closing the window hides it to th
 | MCP HTTP port | 6700 | AI client port |
 | UE scan start / end | 45000 / 45100 | Discovery range |
 | Scan interval (s) | 5 | Periodic discovery |
+| Write gate | Destructive | Off / destructive (delete, rename, stop PIE) / all writes |
 | Language | Follow system | Simplified Chinese / English |
 
 ---
