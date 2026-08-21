@@ -4,7 +4,7 @@
 
 Standalone local MCP **proxy**: no IDE plugin. Run it; it lives in the system tray (menu bar on macOS), discovers local Unreal Engine instances, and forwards tool calls over WebSocket. Capabilities come from the UE **NexusLink** plugin.
 
-Ports and switch layers: [NexusLink usage guide](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.md). This app is the client layer of the **two-layer** switch (UE Enable MCP + tray Enable proxy).
+Ports and switch layers: [NexusLink usage guide](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.md). This app is the client layer of the **two-layer** switch (UE Enable MCP + tray Enable proxy). Do not run the Rider or VSCode proxy on the same machine at the same time.
 
 ---
 
@@ -103,7 +103,7 @@ Double-click the tray icon or **Settings…**. Closing the window hides it to th
 | Setting | Default | Notes |
 |---------|---------|-------|
 | Enable proxy | On | Master switch |
-| MCP HTTP port | 6700 | AI client port |
+| MCP HTTP port | 6700 | AI client port; listen restarts immediately after save |
 | UE scan start / end | 45000 / 45100 | Discovery range |
 | Scan interval (s) | 5 | Periodic discovery |
 | Write gate | Destructive | Off / destructive (delete, rename, stop PIE) / all writes |

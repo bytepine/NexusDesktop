@@ -178,7 +178,18 @@ func (sw *SettingsWindow) buildContent() {
 			log.Errorf("设置保存失败: %v", err)
 			return
 		}
-		statusLabel.SetText(i18n.T("settings.saved"))
+		scanMin, scanMax := newCfg.ScanPortStart, newCfg.ScanPortEnd
+		if scanMin > scanMax {
+			scanMin, scanMax = scanMax, scanMin
+		}
+		if newCfg.HTTPPort >= scanMin && newCfg.HTTPPort <= scanMax {
+			msg := fmt.Sprintf("MCP 端口 %d 与 UE 扫描区间 [%d, %d] 重叠，可能导致代理端口被误当 UE 实例探测",
+				newCfg.HTTPPort, scanMin, scanMax)
+			statusLabel.SetText(msg)
+			log.Warn(msg)
+		} else {
+			statusLabel.SetText(i18n.T("settings.saved"))
+		}
 		sw.manager.Hub.SetWriteGate(proxy.ParseWriteGate(newCfg.WriteGate))
 		if sw.tray != nil {
 			sw.tray.Refresh()

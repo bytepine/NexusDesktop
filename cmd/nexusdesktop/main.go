@@ -207,18 +207,44 @@ func main() {
 		}()
 	}
 
-	// 配置变更热更新（扫描参数）
+	lastHTTPPort := cfg.HTTPPort
+	warnIfPortOverlap := func(c config.Config) {
+		scanMin, scanMax := c.ScanPortStart, c.ScanPortEnd
+		if scanMin > scanMax {
+			scanMin, scanMax = scanMax, scanMin
+		}
+		if c.HTTPPort >= scanMin && c.HTTPPort <= scanMax {
+			nlog.Warnf("MCP 端口 %d 与 UE 扫描区间 [%d, %d] 重叠，可能导致代理端口被误当 UE 实例探测，请调整配置",
+				c.HTTPPort, scanMin, scanMax)
+		}
+	}
+
+	// 配置变更热更新：扫描参数、启停、MCP 端口重启
 	config.OnChange(func(c config.Config) {
 		i18n.Apply(c.Language)
 		mgr.ScanPortStart = c.ScanPortStart
 		mgr.ScanPortEnd = c.ScanPortEnd
 		mgr.Hub.SetWriteGate(proxy.ParseWriteGate(c.WriteGate))
-		if c.Enabled {
-			startScanTimer()
+		warnIfPortOverlap(c)
+		if !c.Enabled {
+			stopServer()
+			stopScanTimer()
+			mgr.Disconnect()
+			return
 		}
+		mu.Lock()
+		running := server != nil
+		mu.Unlock()
+		if !running || lastHTTPPort != c.HTTPPort {
+			stopServer()
+			startServer()
+			lastHTTPPort = c.HTTPPort
+		}
+		startScanTimer()
 	})
 
 	// 初始启动
+	warnIfPortOverlap(cfg)
 	if cfg.Enabled {
 		startServer()
 		startScanTimer()

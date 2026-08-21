@@ -4,7 +4,7 @@
 
 独立的本地 MCP **中转程序**：无需 IDE 插件，双击运行后在系统托盘（macOS 菜单栏）常驻，发现本机 Unreal Engine 实例并经 WebSocket 转发工具调用。能力由 UE 侧 **NexusLink** 提供。
 
-四端端口与开关层数见 [NexusLink 使用指南](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.md)。本程序是 **两层** 开关中的客户端层（UE 启用 MCP + 托盘启用中转）。
+四端端口与开关层数见 [NexusLink 使用指南](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.md)。本程序是 **两层** 开关中的客户端层（UE 启用 MCP + 托盘启用中转）。本机不要与 Rider / VSCode 代理同时开。
 
 ---
 
@@ -103,7 +103,7 @@
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
 | 启用中转服务器 | 开 | 总开关 |
-| MCP HTTP 端口 | 6700 | AI 客户端端口 |
+| MCP HTTP 端口 | 6700 | AI 客户端端口；保存后立即重启监听 |
 | UE 扫描起始 / 结束端口 | 45000 / 45100 | 发现范围 |
 | 扫描间隔（秒） | 5 | 定时发现 |
 | 写操作门控 | 破坏性操作 | 关闭 / 破坏性（删除、重命名、停 PIE）/ 全部写操作 |

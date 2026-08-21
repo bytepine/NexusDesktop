@@ -247,12 +247,7 @@ func (d *Dispatcher) handleToolsCall(id interface{}, params map[string]interface
 	if targetPort > 0 {
 		outcome = d.manager.ForwardToolCallToPort(targetPort, forwardParams)
 	} else {
-		if !d.manager.EnsureLongConnection() {
-			if snap := hub.LookupDegraded(callInfo, now); snap != nil {
-				return makeResult(id, proxy.WrapDegraded(snap.Result, snap.SnapshotAt)), nil
-			}
-			return makeError(id, errInternalError, proxyCfg.ErrorMessages.NotConnected), nil
-		}
+		_ = d.manager.EnsureLongConnection()
 		outcome = d.manager.ForwardToolCall(forwardParams)
 		if outcome.Status == "disconnected" {
 			if d.manager.EnsureLongConnection() {
