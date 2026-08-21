@@ -233,11 +233,16 @@ func (d *Dispatcher) handleToolsCall(id interface{}, params map[string]interface
 	// 解析可选 targetPort（一次性路由不改变长连接绑定）
 	forwardParams := cloneMap(params)
 	targetPort := -1
+	targetHost := ""
 	if args != nil {
 		if tp, ok := args["targetPort"].(float64); ok && tp >= 1024 {
 			targetPort = int(tp)
 			newArgs := cloneMap(args)
 			delete(newArgs, "targetPort")
+			if th, ok := args["targetHost"].(string); ok {
+				targetHost = th
+				delete(newArgs, "targetHost")
+			}
 			forwardParams["arguments"] = newArgs
 		}
 	}
@@ -245,7 +250,7 @@ func (d *Dispatcher) handleToolsCall(id interface{}, params map[string]interface
 	// 转发到 UE
 	var outcome unreal.WsRequestResult
 	if targetPort > 0 {
-		outcome = d.manager.ForwardToolCallToPort(targetPort, forwardParams)
+		outcome = d.manager.ForwardToolCallToPort(targetPort, forwardParams, targetHost)
 	} else {
 		_ = d.manager.EnsureLongConnection()
 		outcome = d.manager.ForwardToolCall(forwardParams)
@@ -301,14 +306,14 @@ func (d *Dispatcher) handleToolsCall(id interface{}, params map[string]interface
 func (d *Dispatcher) handleListInstances(id interface{}) (string, error) {
 	instances := d.manager.DiscoverInstances()
 	wsOpen := d.manager.IsWsOpen()
-	connPort := d.manager.ConnectedPort
 	var arr []interface{}
 	for _, info := range instances {
 		entry := map[string]interface{}{
+			"host":          info.Host,
 			"port":          info.Port,
 			"projectName":   info.ProjectName,
 			"engineVersion": info.EngineVersion,
-			"connected":     info.Port == connPort && wsOpen,
+			"connected":     d.manager.IsConnectedInfo(info) && wsOpen,
 		}
 		if info.NetRole != "" {
 			entry["netRole"] = info.NetRole
@@ -328,15 +333,19 @@ func (d *Dispatcher) handleListInstances(id interface{}) (string, error) {
 // handleConnect 连接到指定端口的 UE 实例。
 func (d *Dispatcher) handleConnect(id interface{}, args map[string]interface{}) (string, error) {
 	port := -1
+	host := ""
 	if args != nil {
 		if p, ok := args["port"].(float64); ok {
 			port = int(p)
+		}
+		if h, ok := args["host"].(string); ok {
+			host = h
 		}
 	}
 	if port < 1024 {
 		return makeError(id, errInvalidParams, fmt.Sprintf("Invalid port: %d", port)), nil
 	}
-	success := d.manager.ConnectTo(port, true)
+	success := d.manager.ConnectTo(port, true, host)
 	if success {
 		_, _ = d.manager.FetchToolsList()
 		if d.onSessionReady != nil {

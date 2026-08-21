@@ -4,8 +4,8 @@ package i18n
 
 var catalogs = map[string]map[string]string{
 	LangZhCN: {
-		"tray.status_connected_named": "已连接：%s (:%d)",
-		"tray.status_connected_port":  "已连接 :%d",
+		"tray.status_connected_named": "已连接：%s (%s:%d)",
+		"tray.status_connected_port":  "已连接 %s:%d",
 		"tray.status_disconnected":    "未连接 UE 实例",
 		"tray.no_instances":           "（未发现实例）",
 		"tray.select_instance":        "选择 UE 实例",
@@ -30,6 +30,9 @@ var catalogs = map[string]map[string]string{
 		"settings.title":          "NexusDesktop 设置",
 		"settings.server_section": "服务器配置",
 		"settings.enable_proxy":   "启用中转服务器",
+		"settings.listen_lan":     "允许局域网接入（绑 0.0.0.0）",
+		"settings.remote_unreal":  "远程 UE（每行 host:端口 token）",
+		"settings.remote_placeholder": "192.168.1.10:45000 <从 UE 设置复制的 token>",
 		"settings.http_port":      "MCP HTTP 端口",
 		"settings.scan_start":     "UE 扫描起始端口",
 		"settings.scan_end":       "UE 扫描结束端口",
@@ -62,8 +65,8 @@ var catalogs = map[string]map[string]string{
 		"gate.always":  "本会话总是允许",
 	},
 	LangEn: {
-		"tray.status_connected_named": "Connected: %s (:%d)",
-		"tray.status_connected_port":  "Connected :%d",
+		"tray.status_connected_named": "Connected: %s (%s:%d)",
+		"tray.status_connected_port":  "Connected %s:%d",
 		"tray.status_disconnected":    "No UE instance connected",
 		"tray.no_instances":           "(No instances found)",
 		"tray.select_instance":        "Select UE instance",
@@ -88,6 +91,9 @@ var catalogs = map[string]map[string]string{
 		"settings.title":          "NexusDesktop Settings",
 		"settings.server_section": "Server",
 		"settings.enable_proxy":   "Enable proxy server",
+		"settings.listen_lan":     "Allow LAN (bind 0.0.0.0)",
+		"settings.remote_unreal":  "Remote UE (one host:port token per line)",
+		"settings.remote_placeholder": "192.168.1.10:45000 <token from UE settings>",
 		"settings.http_port":      "MCP HTTP port",
 		"settings.scan_start":     "UE scan start port",
 		"settings.scan_end":       "UE scan end port",

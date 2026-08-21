@@ -57,7 +57,10 @@ type Manager struct {
 
 	Instances     []InstanceInfo
 	ConnectedPort int
+	ConnectedHost string
 	PreferredPort int
+	PreferredHost string
+	RemoteUnreal  []RemoteUnreal
 	// manuallyDisconnected 表示用户主动断开，抑制自动重连直到用户手动连接。
 	manuallyDisconnected bool
 
@@ -101,6 +104,7 @@ type Manager struct {
 type StateSnapshot struct {
 	Instances     []InstanceInfo
 	ConnectedPort int
+	ConnectedHost string
 	WsOpen        bool
 }
 
@@ -113,6 +117,7 @@ func (m *Manager) Snapshot() StateSnapshot {
 	return StateSnapshot{
 		Instances:     cp,
 		ConnectedPort: m.ConnectedPort,
+		ConnectedHost: m.ConnectedHost,
 		WsOpen:        m.isWsOpen(),
 	}
 }
@@ -121,7 +126,9 @@ func (m *Manager) Snapshot() StateSnapshot {
 func NewManager() *Manager {
 	m := &Manager{
 		ConnectedPort:   -1,
+		ConnectedHost:   LoopbackHost,
 		PreferredPort:   -1,
+		PreferredHost:   LoopbackHost,
 		ScanPortStart:   45000,
 		ScanPortEnd:     45100,
 		pendingRequests: make(map[int64]chan WsRequestResult),
@@ -131,6 +138,12 @@ func NewManager() *Manager {
 	}
 	m.requestChain <- struct{}{} // 初始令牌
 	return m
+}
+
+func (m *Manager) SetRemoteUnreal(list []RemoteUnreal) {
+	m.mu.Lock()
+	m.RemoteUnreal = list
+	m.mu.Unlock()
 }
 
 // ToolsCallTimeout 供 Dispatcher 使用的工具调用超时。
@@ -146,6 +159,7 @@ func (m *Manager) MaintainConnection() {
 	m.mu.Lock()
 	wsOpen := m.isWsOpen()
 	port := m.ConnectedPort
+	connHost := m.ConnectedHost
 	pending := len(m.pendingRequests)
 	m.mu.Unlock()
 
@@ -157,7 +171,7 @@ func (m *Manager) MaintainConnection() {
 		if m.fullScanCountdown > 0 {
 			m.fullScanCountdown--
 			m.mu.Unlock()
-			info := m.probeStatus(port)
+			info := m.probeStatus(port, connHost, "")
 			if info != nil {
 				return // 心跳成功，省去全量扫描
 			}
@@ -225,12 +239,13 @@ func (m *Manager) DiscoverInstances() []InstanceInfo {
 	// 已连接实例不在本轮结果中 → 断开
 	m.mu.Lock()
 	connPort = m.ConnectedPort
+	connHost := m.ConnectedHost
 	m.mu.Unlock()
 	if connPort > 0 {
 		found2 := m.instanceList()
 		exists := false
 		for _, i := range found2 {
-			if i.Port == connPort {
+			if InstanceKey(i.Host, i.Port) == InstanceKey(connHost, connPort) {
 				exists = true
 				break
 			}
@@ -246,13 +261,15 @@ func (m *Manager) DiscoverInstances() []InstanceInfo {
 	m.mu.Lock()
 	connPort = m.ConnectedPort
 	prefPort := m.PreferredPort
+	prefHost := m.PreferredHost
 	manuallyDisc := m.manuallyDisconnected
 	m.mu.Unlock()
 	if connPort < 0 && len(found) > 0 && !manuallyDisc {
 		var target *InstanceInfo
 		if prefPort > 0 {
+			pk := InstanceKey(prefHost, prefPort)
 			for i := range found {
-				if found[i].Port == prefPort {
+				if InstanceKey(found[i].Host, found[i].Port) == pk {
 					target = &found[i]
 					break
 				}
@@ -269,7 +286,7 @@ func (m *Manager) DiscoverInstances() []InstanceInfo {
 		if target == nil {
 			target = &found[0]
 		}
-		m.ConnectTo(target.Port, false)
+		m.ConnectTo(target.Port, false, target.Host)
 	}
 
 	return found
@@ -304,7 +321,7 @@ func (m *Manager) scanPortsParallel() []InstanceInfo {
 			wg.Add(1)
 			go func(idx, p int) {
 				defer wg.Done()
-				results[idx] = m.probeStatus(p)
+				results[idx] = m.probeStatus(p, LoopbackHost, "")
 			}(i, p)
 		}
 		wg.Wait()
@@ -316,17 +333,26 @@ func (m *Manager) scanPortsParallel() []InstanceInfo {
 		}
 		mu2.Unlock()
 	}
+	m.mu.Lock()
+	remotes := append([]RemoteUnreal(nil), m.RemoteUnreal...)
+	m.mu.Unlock()
+	for _, r := range remotes {
+		if info := m.probeStatus(r.McpPort, r.Host, r.AuthToken); info != nil {
+			found = append(found, *info)
+		}
+	}
 	return found
 }
 
-func (m *Manager) probeStatus(port int) *InstanceInfo {
+func (m *Manager) probeStatus(port int, host string, tokenOverride string) *InstanceInfo {
+	probeHost := NormalizeHost(host)
 	client := &http.Client{
 		Timeout: probeTimeout,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
 	}
-	resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/status", port))
+	resp, err := client.Get(fmt.Sprintf("http://%s:%d/status", probeHost, port))
 	if err != nil {
 		return nil
 	}
@@ -370,21 +396,47 @@ func stringField(m map[string]interface{}, key string) string {
 
 // ConnectTo 通过 WebSocket 连接到指定端口的 UE 实例。
 // setPreferred=true 时记录为 PreferredPort（用户手动选择）。
-func (m *Manager) ConnectTo(port int, setPreferred bool) bool {
+func (m *Manager) tokenFor(host string, port int) string {
+	h := NormalizeHost(host)
+	if h == LoopbackHost {
+		return ReadAuthToken(port)
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, r := range m.RemoteUnreal {
+		if r.Host == h && r.McpPort == port {
+			return r.AuthToken
+		}
+	}
+	return ""
+}
+
+func (m *Manager) IsConnectedInfo(info InstanceInfo) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.ConnectedPort > 0 && InstanceKey(info.Host, info.Port) == InstanceKey(m.ConnectedHost, m.ConnectedPort)
+}
+
+func (m *Manager) ConnectTo(port int, setPreferred bool, hostOpt ...string) bool {
+	targetHost := LoopbackHost
+	if len(hostOpt) > 0 && hostOpt[0] != "" {
+		targetHost = NormalizeHost(hostOpt[0])
+	}
 	if setPreferred {
 		m.mu.Lock()
 		m.PreferredPort = port
-		m.manuallyDisconnected = false // 用户主动选择，恢复自动重连
+		m.PreferredHost = targetHost
+		m.manuallyDisconnected = false
 		m.mu.Unlock()
 	}
 	m.mu.Lock()
-	if m.ConnectedPort == port && m.isWsOpen() {
+	if m.ConnectedPort == port && m.ConnectedHost == targetHost && m.isWsOpen() {
 		m.mu.Unlock()
 		return true
 	}
 	m.mu.Unlock()
 
-	info := m.probeStatus(port)
+	info := m.probeStatus(port, targetHost, m.tokenFor(targetHost, port))
 	if info == nil {
 		return false
 	}
@@ -395,25 +447,26 @@ func (m *Manager) ConnectTo(port int, setPreferred bool) bool {
 	m.mu.Unlock()
 
 	dialer := websocket.Dialer{HandshakeTimeout: wsHandshakeTimeout}
-	conn, _, err := dialer.Dial(fmt.Sprintf("ws://127.0.0.1:%d", info.WsPort), nil)
+	conn, _, err := dialer.Dial(fmt.Sprintf("ws://%s:%d", info.Host, info.WsPort), nil)
 	if err != nil {
-		log.Warnf("WS 连接失败 port=%d: %v", port, err)
+		log.Warnf("WS 连接失败 %s:%d: %v", targetHost, port, err)
 		return false
 	}
 
 	token := info.AuthToken
 	if token == "" {
-		token = ReadAuthToken(port)
+		token = m.tokenFor(targetHost, port)
 	}
 	if !authWebSocket(conn, token) {
 		_ = conn.Close()
-		log.Warnf("WS auth 失败 port=%d", port)
+		log.Warnf("WS auth 失败 %s:%d", targetHost, port)
 		return false
 	}
 
 	m.mu.Lock()
 	m.ws = conn
 	m.ConnectedPort = port
+	m.ConnectedHost = targetHost
 	m.connectedToolsListMode = info.ToolsListMode
 	m.mu.Unlock()
 
@@ -464,8 +517,10 @@ func (m *Manager) EnsureLongConnection() bool {
 	}
 	m.mu.Lock()
 	reconnPort := m.ConnectedPort
+	reconnHost := m.ConnectedHost
 	if reconnPort < 0 {
 		reconnPort = m.PreferredPort
+		reconnHost = m.PreferredHost
 	}
 	manuallyDisc := m.manuallyDisconnected
 	m.mu.Unlock()
@@ -474,7 +529,7 @@ func (m *Manager) EnsureLongConnection() bool {
 		return false
 	}
 	if reconnPort > 0 {
-		return m.ConnectTo(reconnPort, false)
+		return m.ConnectTo(reconnPort, false, reconnHost)
 	}
 	m.DiscoverInstances()
 	return m.IsWsOpen()
@@ -490,11 +545,13 @@ func (m *Manager) resetWsConnection(clearPreferred bool) {
 	}
 	prev := m.ConnectedPort
 	m.ConnectedPort = -1
+	m.ConnectedHost = LoopbackHost
 	m.connectedToolsListMode = "starter"
 	m.upstreamInstructions = ""
 	m.cachedProxyConfig = nil
 	if clearPreferred {
 		m.PreferredPort = -1
+		m.PreferredHost = LoopbackHost
 	}
 	if prev > 0 {
 		cb := m.OnConnectionChanged
@@ -529,6 +586,7 @@ func (m *Manager) receiveLoop(conn *websocket.Conn, epoch int64) {
 				m.ws = nil
 				prev := m.ConnectedPort
 				m.ConnectedPort = -1
+				m.ConnectedHost = LoopbackHost
 				m.connectedToolsListMode = "starter"
 				m.upstreamInstructions = ""
 				m.cachedProxyConfig = nil
@@ -726,18 +784,23 @@ func (m *Manager) sendProxyFeedbackEvent(event ProxyFeedbackEvent) WsRequestResu
 }
 
 // ForwardToolCallToPort 通过一次性 WS 连接转发到指定端口（不改动长连接）。
-func (m *Manager) ForwardToolCallToPort(port int, params map[string]interface{}) WsRequestResult {
+func (m *Manager) ForwardToolCallToPort(port int, params map[string]interface{}, hostOpt ...string) WsRequestResult {
+	host := LoopbackHost
+	if len(hostOpt) > 0 && hostOpt[0] != "" {
+		host = NormalizeHost(hostOpt[0])
+	}
 	m.mu.Lock()
 	var info *InstanceInfo
 	for i := range m.Instances {
-		if m.Instances[i].Port == port {
-			info = &m.Instances[i]
+		if m.Instances[i].Port == port && NormalizeHost(m.Instances[i].Host) == host {
+			cp := m.Instances[i]
+			info = &cp
 			break
 		}
 	}
 	m.mu.Unlock()
 	if info == nil {
-		probed := m.probeStatus(port)
+		probed := m.probeStatus(port, host, m.tokenFor(host, port))
 		if probed == nil {
 			return WsRequestResult{Status: "disconnected"}
 		}
@@ -745,7 +808,7 @@ func (m *Manager) ForwardToolCallToPort(port int, params map[string]interface{})
 	}
 
 	dialer := websocket.Dialer{HandshakeTimeout: wsHandshakeTimeout}
-	conn, _, err := dialer.Dial(fmt.Sprintf("ws://127.0.0.1:%d", info.WsPort), nil)
+	conn, _, err := dialer.Dial(fmt.Sprintf("ws://%s:%d", info.Host, info.WsPort), nil)
 	if err != nil {
 		return WsRequestResult{Status: "disconnected"}
 	}
@@ -753,7 +816,7 @@ func (m *Manager) ForwardToolCallToPort(port int, params map[string]interface{})
 
 	token := info.AuthToken
 	if token == "" {
-		token = ReadAuthToken(port)
+		token = m.tokenFor(info.Host, port)
 	}
 	if !authWebSocket(conn, token) {
 		return WsRequestResult{Status: "disconnected"}
@@ -927,12 +990,12 @@ func instancesEqual(a, b []InstanceInfo) bool {
 	if len(a) != len(b) {
 		return false
 	}
-	ports := make(map[int]struct{}, len(a))
+	keys := make(map[string]struct{}, len(a))
 	for _, inst := range a {
-		ports[inst.Port] = struct{}{}
+		keys[InstanceKey(inst.Host, inst.Port)] = struct{}{}
 	}
 	for _, inst := range b {
-		if _, ok := ports[inst.Port]; !ok {
+		if _, ok := keys[InstanceKey(inst.Host, inst.Port)]; !ok {
 			return false
 		}
 	}

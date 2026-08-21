@@ -5,6 +5,7 @@ package ui
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -29,7 +30,7 @@ type SettingsWindow struct {
 func NewSettingsWindow(app fyne.App, mgr *unreal.Manager) *SettingsWindow {
 	sw := &SettingsWindow{manager: mgr}
 	w := app.NewWindow(i18n.T("settings.title"))
-	w.Resize(fyne.NewSize(480, 520))
+	w.Resize(fyne.NewSize(520, 640))
 	w.SetFixedSize(true)
 	// 关闭按钮仅隐藏，不退出
 	w.SetCloseIntercept(func() {
@@ -59,6 +60,14 @@ func (sw *SettingsWindow) buildContent() {
 	// ---- 服务器开关 ----
 	enabledCheck := widget.NewCheck(i18n.T("settings.enable_proxy"), nil)
 	enabledCheck.SetChecked(cfg.Enabled)
+
+	listenLanCheck := widget.NewCheck(i18n.T("settings.listen_lan"), nil)
+	listenLanCheck.SetChecked(cfg.ListenLan)
+
+	remoteEntry := widget.NewMultiLineEntry()
+	remoteEntry.SetText(formatRemoteLines(cfg.RemoteUnreal))
+	remoteEntry.SetPlaceHolder(i18n.T("settings.remote_placeholder"))
+	remoteEntry.Wrapping = fyne.TextWrapOff
 
 	// ---- 端口设置 ----
 	httpPortEntry := widget.NewEntry()
@@ -113,7 +122,6 @@ func (sw *SettingsWindow) buildContent() {
 	// ---- 已发现实例列表 ----
 	snap := sw.manager.Snapshot()
 	instances := snap.Instances
-	connPort := snap.ConnectedPort
 	wsOpen := snap.WsOpen
 
 	instanceRows := []fyne.CanvasObject{
@@ -124,14 +132,14 @@ func (sw *SettingsWindow) buildContent() {
 	}
 	for _, inst := range instances {
 		inst := inst
-		label := fmt.Sprintf("%s  :%d  [%s]", inst.ProjectName, inst.Port, inst.NetRole)
+		label := fmt.Sprintf("%s  %s:%d  [%s]", inst.ProjectName, inst.Host, inst.Port, inst.NetRole)
 		var btn *widget.Button
-		if inst.Port == connPort && wsOpen {
+		if sw.manager.IsConnectedInfo(inst) && wsOpen {
 			btn = widget.NewButton("✓ "+label, nil)
 			btn.Importance = widget.HighImportance
 		} else {
 			btn = widget.NewButton(label, func() {
-				sw.manager.ConnectTo(inst.Port, true)
+				sw.manager.ConnectTo(inst.Port, true, inst.Host)
 				if sw.tray != nil {
 					sw.tray.Refresh()
 				}
@@ -161,6 +169,8 @@ func (sw *SettingsWindow) buildContent() {
 
 		newCfg := config.Get()
 		newCfg.Enabled = enabledCheck.Checked
+		newCfg.ListenLan = listenLanCheck.Checked
+		newCfg.RemoteUnreal = parseRemoteLines(remoteEntry.Text)
 		newCfg.HTTPPort = httpPort
 		newCfg.ScanPortStart = scanStart
 		newCfg.ScanPortEnd = scanEnd
@@ -204,6 +214,7 @@ func (sw *SettingsWindow) buildContent() {
 	form := container.NewVBox(
 		widget.NewLabelWithStyle(i18n.T("settings.server_section"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		enabledCheck,
+		listenLanCheck,
 		container.NewGridWithColumns(2,
 			widget.NewLabel(i18n.T("settings.http_port")),
 			httpPortEntry,
@@ -218,6 +229,8 @@ func (sw *SettingsWindow) buildContent() {
 			widget.NewLabel(i18n.T("settings.language")),
 			langSelect,
 		),
+		widget.NewLabel(i18n.T("settings.remote_unreal")),
+		remoteEntry,
 		widget.NewSeparator(),
 	)
 	for _, row := range instanceRows {
@@ -228,4 +241,24 @@ func (sw *SettingsWindow) buildContent() {
 	form.Add(statusLabel)
 
 	sw.win.SetContent(container.NewScroll(form))
+}
+
+func formatRemoteLines(list []config.RemoteUnreal) string {
+	if len(list) == 0 {
+		return ""
+	}
+	lines := make([]string, 0, len(list))
+	for _, r := range list {
+		lines = append(lines, fmt.Sprintf("%s:%d %s", r.Host, r.McpPort, r.AuthToken))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func parseRemoteLines(text string) []config.RemoteUnreal {
+	parsed := unreal.ParseRemoteText(text)
+	out := make([]config.RemoteUnreal, 0, len(parsed))
+	for _, r := range parsed {
+		out = append(out, config.RemoteUnreal{Host: r.Host, McpPort: r.McpPort, AuthToken: r.AuthToken})
+	}
+	return out
 }

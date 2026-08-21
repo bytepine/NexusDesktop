@@ -11,6 +11,7 @@ import (
 
 	"github.com/bytepine/NexusDesktop/internal/config"
 	"github.com/bytepine/NexusDesktop/internal/i18n"
+	"github.com/bytepine/NexusDesktop/internal/unreal"
 )
 
 // configWindow 展示 MCP 客户端配置片段，提供 Streamable HTTP / SSE 切换与一键复制。
@@ -62,9 +63,9 @@ func (cw *configWindow) retranslate() {
 	cw.win.SetTitle(i18n.T("mcp.title"))
 	switch cw.kind {
 	case "stream":
-		cw.setConfigText(buildStreamConfig(cw.lastPort, config.Get().ProxyToken))
+		cw.setConfigText(buildStreamConfig(cw.lastPort, config.Get().ProxyToken, unreal.McpDisplayHost(config.Get().ListenLan)))
 	case "sse":
-		cw.setConfigText(buildSseConfig(cw.lastPort, config.Get().ProxyToken))
+		cw.setConfigText(buildSseConfig(cw.lastPort, config.Get().ProxyToken, unreal.McpDisplayHost(config.Get().ListenLan)))
 	default:
 		cw.setConfigText(i18n.T("mcp.placeholder"))
 	}
@@ -80,13 +81,13 @@ func (cw *configWindow) buildContentWithPort(port int) fyne.CanvasObject {
 	streamBtn := widget.NewButton(i18n.T("mcp.stream"), func() {
 		cw.kind = "stream"
 		cw.lastPort = port
-		cw.setConfigText(buildStreamConfig(port, token))
+		cw.setConfigText(buildStreamConfig(port, token, unreal.McpDisplayHost(config.Get().ListenLan)))
 	})
 
 	sseBtn := widget.NewButton(i18n.T("mcp.sse"), func() {
 		cw.kind = "sse"
 		cw.lastPort = port
-		cw.setConfigText(buildSseConfig(port, token))
+		cw.setConfigText(buildSseConfig(port, token, unreal.McpDisplayHost(config.Get().ListenLan)))
 	})
 
 	copyBtn := widget.NewButton(i18n.T("mcp.copy"), func() {
@@ -113,43 +114,43 @@ func (cw *configWindow) setConfigText(text string) {
 	cw.area.SetText(text)
 }
 
-func buildStreamConfig(port int, token string) string {
+func buildStreamConfig(port int, token string, host string) string {
 	return fmt.Sprintf(
 		i18n.T("mcp.comment_cursor")+"\n"+
 			"\"nexus-unreal\": {\n"+
-			"  \"url\": \"http://127.0.0.1:%d/stream\",\n"+
+			"  \"url\": \"http://%s:%d/stream\",\n"+
 			"  \"headers\": {\n"+
 			"    \"Authorization\": \"Bearer %s\"\n"+
 			"  }\n"+
 			"}\n\n"+
 			"# CodeBuddy / Windsurf\n"+
 			"\"Nexus\": {\n"+
-			"  \"url\": \"http://127.0.0.1:%d/stream\",\n"+
+			"  \"url\": \"http://%s:%d/stream\",\n"+
 			"  \"transportType\": \"streamable-http\",\n"+
 			"  \"headers\": {\n"+
 			"    \"Authorization\": \"Bearer %s\"\n"+
 			"  }\n"+
 			"}",
-		port, token, port, token,
+		host, port, token, host, port, token,
 	)
 }
 
-func buildSseConfig(port int, token string) string {
+func buildSseConfig(port int, token string, host string) string {
 	return fmt.Sprintf(
 		i18n.T("mcp.comment_cursor")+"\n"+
 			"\"nexus-unreal\": {\n"+
-			"  \"url\": \"http://127.0.0.1:%d/sse\",\n"+
+			"  \"url\": \"http://%s:%d/sse\",\n"+
 			"  \"headers\": {\n"+
 			"    \"Authorization\": \"Bearer %s\"\n"+
 			"  }\n"+
 			"}\n\n"+
 			"# CodeBuddy / Windsurf\n"+
 			"\"Nexus\": {\n"+
-			"  \"url\": \"http://127.0.0.1:%d/sse\",\n"+
+			"  \"url\": \"http://%s:%d/sse\",\n"+
 			"  \"headers\": {\n"+
 			"    \"Authorization\": \"Bearer %s\"\n"+
 			"  }\n"+
 			"}",
-		port, token, port, token,
+		host, port, token, host, port, token,
 	)
 }

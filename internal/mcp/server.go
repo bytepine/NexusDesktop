@@ -63,8 +63,11 @@ func NewServer(mgr *unreal.Manager, version, proxyToken string) *Server {
 
 // Start 在指定端口启动 HTTP 服务器（阻塞直到绑定成功或失败）。
 // 端口占用时自动顺延，最多尝试 100 个。
-func (s *Server) Start(preferredPort int) (int, error) {
-	port, err := findAvailablePort(preferredPort)
+func (s *Server) Start(preferredPort int, bindHost string) (int, error) {
+	if bindHost == "" {
+		bindHost = unreal.LoopbackHost
+	}
+	port, err := findAvailablePort(preferredPort, bindHost)
 	if err != nil {
 		return 0, err
 	}
@@ -74,7 +77,7 @@ func (s *Server) Start(preferredPort int) (int, error) {
 	mux.HandleFunc("/sse", s.handleSSEEndpoint)
 
 	srv := &http.Server{
-		Addr:    fmt.Sprintf("127.0.0.1:%d", port),
+		Addr:    fmt.Sprintf("%s:%d", bindHost, port),
 		Handler: http.HandlerFunc(s.guard(mux)),
 	}
 	s.httpServer = srv
@@ -84,7 +87,7 @@ func (s *Server) Start(preferredPort int) (int, error) {
 		return 0, err
 	}
 	s.Port = port
-	log.Infof("MCP 服务器已就绪：http://127.0.0.1:%d/stream", port)
+	log.Infof("MCP 服务器已就绪：http://%s:%d/stream bind=%s", unreal.McpDisplayHost(bindHost != unreal.LoopbackHost), port, bindHost)
 
 	go func() {
 		if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
@@ -357,13 +360,13 @@ func newSessionID() string {
 }
 
 // findAvailablePort 从 startPort 开始顺延寻找可用端口，最多尝试 100 个。
-func findAvailablePort(startPort int) (int, error) {
+func findAvailablePort(startPort int, bindHost string) (int, error) {
 	for i := 0; i < 100; i++ {
 		port := startPort + i
 		if port > 65535 {
 			break
 		}
-		ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+		ln, err := net.Listen("tcp", fmt.Sprintf("%s:%d", bindHost, port))
 		if err == nil {
 			_ = ln.Close()
 			return port, nil

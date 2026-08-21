@@ -120,13 +120,13 @@ func (tc *TrayController) rebuildMenu() {
 	var statusLabel string
 	if wsOpen && connPort > 0 {
 		for _, inst := range snap.Instances {
-			if inst.Port == connPort {
-				statusLabel = i18n.T("tray.status_connected_named", inst.ProjectName, connPort)
+			if tc.manager.IsConnectedInfo(inst) {
+				statusLabel = i18n.T("tray.status_connected_named", inst.ProjectName, inst.Host, inst.Port)
 				break
 			}
 		}
 		if statusLabel == "" {
-			statusLabel = i18n.T("tray.status_connected_port", connPort)
+			statusLabel = i18n.T("tray.status_connected_port", snap.ConnectedHost, connPort)
 		}
 	} else {
 		statusLabel = i18n.T("tray.status_disconnected")
@@ -151,12 +151,12 @@ func (tc *TrayController) rebuildMenu() {
 	var instanceItems []*fyne.MenuItem
 	for _, inst := range instances {
 		inst := inst // 捕获
-		label := fmt.Sprintf("%s :%d [%s]", inst.ProjectName, inst.Port, inst.NetRole)
-		if inst.Port == connPort && wsOpen {
+		label := fmt.Sprintf("%s %s:%d [%s]", inst.ProjectName, inst.Host, inst.Port, inst.NetRole)
+		if tc.manager.IsConnectedInfo(inst) && wsOpen {
 			label = "✓ " + label
 		}
 		item := fyne.NewMenuItem(label, func() {
-			tc.manager.ConnectTo(inst.Port, true)
+			tc.manager.ConnectTo(inst.Port, true, inst.Host)
 			tc.Refresh()
 		})
 		instanceItems = append(instanceItems, item)

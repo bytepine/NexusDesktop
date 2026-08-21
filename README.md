@@ -110,7 +110,11 @@
 | UE 扫描起始 / 结束端口 | 45000 / 45100 | 发现范围 |
 | 扫描间隔（秒） | 5 | 定时发现 |
 | 写操作门控 | 破坏性操作 | 关闭 / 破坏性（删除、重命名、停 PIE）/ 全部写操作 |
+| 允许局域网接入 | 关 | MCP 绑 `0.0.0.0` |
+| 远程 UE | （空） | 每行 `host:端口 token` |
 | 界面语言 | 跟随系统 | 简体中文 / English |
+
+跨机见 [usage-guide §1](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.md)。
 
 ---
 

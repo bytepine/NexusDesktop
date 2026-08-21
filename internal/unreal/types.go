@@ -4,6 +4,7 @@ package unreal
 
 // InstanceInfo 描述一个已加载 NexusLink 的 UE 实例。
 type InstanceInfo struct {
+	Host          string
 	Port          int
 	WsPort        int
 	ProjectName   string

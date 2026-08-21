@@ -11,10 +11,18 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sync"
 )
 
 const appDirName = "NexusDesktop"
+
+// RemoteUnreal 是显式配置的远程 UE。
+type RemoteUnreal struct {
+	Host      string `json:"host"`
+	McpPort   int    `json:"mcpPort"`
+	AuthToken string `json:"authToken"`
+}
 
 // Config 保存全部用户配置项。
 type Config struct {
@@ -31,6 +39,9 @@ type Config struct {
 	WriteGate string `json:"writeGate"`
 	// Language 是界面语言：auto（跟随系统，默认）、zh-CN、en。
 	Language string `json:"language"`
+	ListenLan bool `json:"listenLan"`
+	// RemoteUnreal 显式远程 UE（不扫网段）。
+	RemoteUnreal []RemoteUnreal `json:"remoteUnreal,omitempty"`
 	// ProxyToken 是 Agent → 本机 MCP HTTP 的 Bearer。
 	ProxyToken string `json:"proxyToken"`
 }
@@ -126,7 +137,7 @@ func Save(cfg Config) error {
 	mu.Unlock()
 
 	// 仅在实际值变化时触发回调
-	if old != cfg {
+	if !reflect.DeepEqual(old, cfg) {
 		for _, cb := range cbs {
 			cb(cfg)
 		}

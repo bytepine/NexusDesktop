@@ -56,6 +56,7 @@ func main() {
 	mgr := unreal.NewManager()
 	mgr.ScanPortStart = cfg.ScanPortStart
 	mgr.ScanPortEnd = cfg.ScanPortEnd
+	mgr.SetRemoteUnreal(toUnrealRemote(cfg.RemoteUnreal))
 	mgr.Hub.SetWriteGate(proxy.ParseWriteGate(cfg.WriteGate))
 
 	// Fyne 应用（主 UI 入口）
@@ -99,7 +100,12 @@ func main() {
 			return
 		}
 		srv := mcp.NewServer(mgr, appVersion, c.ProxyToken)
-		port, err := srv.Start(c.HTTPPort)
+		bind := "127.0.0.1"
+		if c.ListenLan {
+			bind = "0.0.0.0"
+		}
+		mgr.SetRemoteUnreal(toUnrealRemote(c.RemoteUnreal))
+		port, err := srv.Start(c.HTTPPort, bind)
 		if err != nil {
 			nlog.Errorf("MCP 服务器启动失败: %v", err)
 			return
@@ -209,6 +215,7 @@ func main() {
 	}
 
 	lastHTTPPort := cfg.HTTPPort
+	lastListenLan := cfg.ListenLan
 	warnIfPortOverlap := func(c config.Config) {
 		scanMin, scanMax := c.ScanPortStart, c.ScanPortEnd
 		if scanMin > scanMax {
@@ -225,6 +232,7 @@ func main() {
 		i18n.Apply(c.Language)
 		mgr.ScanPortStart = c.ScanPortStart
 		mgr.ScanPortEnd = c.ScanPortEnd
+		mgr.SetRemoteUnreal(toUnrealRemote(c.RemoteUnreal))
 		mgr.Hub.SetWriteGate(proxy.ParseWriteGate(c.WriteGate))
 		warnIfPortOverlap(c)
 		if !c.Enabled {
@@ -236,10 +244,11 @@ func main() {
 		mu.Lock()
 		running := server != nil
 		mu.Unlock()
-		if !running || lastHTTPPort != c.HTTPPort {
+		if !running || lastHTTPPort != c.HTTPPort || lastListenLan != c.ListenLan {
 			stopServer()
 			startServer()
 			lastHTTPPort = c.HTTPPort
+			lastListenLan = c.ListenLan
 		}
 		startScanTimer()
 	})
@@ -267,6 +276,14 @@ func main() {
 	stopScanTimer()
 	stopServer()
 	mgr.Dispose()
+}
+
+func toUnrealRemote(list []config.RemoteUnreal) []unreal.RemoteUnreal {
+	out := make([]unreal.RemoteUnreal, 0, len(list))
+	for _, r := range list {
+		out = append(out, unreal.RemoteUnreal{Host: r.Host, McpPort: r.McpPort, AuthToken: r.AuthToken})
+	}
+	return out
 }
 
 // recoverAndLogCrash 捕获未处理 panic，写入 crash.log 并记入主日志（windowsgui 下 stdout 不可见）。

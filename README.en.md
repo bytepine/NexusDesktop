@@ -110,7 +110,11 @@ Double-click the tray icon or **Settings…**. Closing the window hides it to th
 | UE scan start / end | 45000 / 45100 | Discovery range |
 | Scan interval (s) | 5 | Periodic discovery |
 | Write gate | Destructive | Off / destructive (delete, rename, stop PIE) / all writes |
+| Allow LAN | Off | Bind MCP to `0.0.0.0` |
+| Remote UE | (empty) | One `host:port token` per line |
 | Language | Follow system | Simplified Chinese / English |
+
+Cross-machine: [usage-guide §1](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.md).
 
 ---
 
