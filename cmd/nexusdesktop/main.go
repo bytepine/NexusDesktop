@@ -41,6 +41,7 @@ func main() {
 
 	// 初始化配置与日志（须在 recover 之前，便于 crash.log 落盘到同一目录）
 	cfg, _ := config.Load()
+	_ = config.Save(cfg)
 	i18n.Apply(cfg.Language)
 	nlog.Init(config.AppDir())
 	defer recoverAndLogCrash()
@@ -97,7 +98,7 @@ func main() {
 		if !c.Enabled || server != nil {
 			return
 		}
-		srv := mcp.NewServer(mgr, appVersion)
+		srv := mcp.NewServer(mgr, appVersion, c.ProxyToken)
 		port, err := srv.Start(c.HTTPPort)
 		if err != nil {
 			nlog.Errorf("MCP 服务器启动失败: %v", err)

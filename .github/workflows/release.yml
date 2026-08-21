@@ -21,6 +21,8 @@ jobs:
         run: |
           $url = "https://github.com/skeeto/w64devkit/releases/download/v1.23.0/w64devkit-1.23.0.zip"
           Invoke-WebRequest -Uri $url -OutFile "w64devkit.zip" -UseBasicParsing
+          $item = Get-Item "w64devkit.zip"
+          if ($item.Length -ne 76798128) { throw "w64devkit-1.23.0.zip size $($item.Length) != 76798128" }
           Expand-Archive "w64devkit.zip" -DestinationPath "C:\w64devkit"
           echo "C:\w64devkit\w64devkit\bin" >> $env:GITHUB_PATH
 
@@ -29,12 +31,14 @@ jobs:
           go-version: "1.25.x"
 
       - name: Install goversioninfo (icon + FileVersion)
-        run: go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest
+        run: go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@v1.5.0
 
       - name: Install Inno Setup 7
         run: |
           $url = "https://github.com/jrsoftware/issrc/releases/download/is-7_1_0/innosetup-7.1.0-x64.exe"
           Invoke-WebRequest -Uri $url -OutFile "innosetup7.exe" -UseBasicParsing
+          $hash = (Get-FileHash "innosetup7.exe" -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne "0362a383ed217d4c4239b5933866dd96d3eb2102737da92f80f6057a4b40df2f") { throw "Inno Setup checksum mismatch: $hash" }
           Start-Process -FilePath ".\innosetup7.exe" -ArgumentList "/VERYSILENT","/NORESTART","/SP-","/SUPPRESSMSGBOXES" -Wait
           echo "C:\Program Files\Inno Setup 7" >> $env:GITHUB_PATH
 
@@ -96,6 +100,9 @@ jobs:
         with:
           merge-multiple: true
 
+      - name: Generate SHA256SUMS
+        run: sha256sum NexusDesktop-* > SHA256SUMS
+
       - name: Create Release
         uses: softprops/action-gh-release@v3
         with:
@@ -105,3 +112,4 @@ jobs:
             NexusDesktop-windows-amd64-v*-update.zip
             NexusDesktop-darwin-universal.dmg
             NexusDesktop-darwin-universal-v*-update.zip
+            SHA256SUMS

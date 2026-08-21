@@ -4,6 +4,8 @@ package ui
 
 import (
 	"archive/zip"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -132,6 +134,105 @@ func githubReleasePage(version string) string {
 		return releasesURL
 	}
 	return githubTagBase + tagPrefix + v
+}
+
+func checksumsURLFor(version string) string {
+	v := strings.TrimSpace(version)
+	v = strings.TrimPrefix(v, "v")
+	v = strings.TrimPrefix(v, "V")
+	if v == "" {
+		return ""
+	}
+	return githubDownloadBase + tagPrefix + v + "/SHA256SUMS"
+}
+
+func updateZipNameFor(goos, version string) string {
+	v := strings.TrimSpace(version)
+	v = strings.TrimPrefix(v, "v")
+	v = strings.TrimPrefix(v, "V")
+	switch goos {
+	case "windows":
+		return "NexusDesktop-windows-amd64-v" + v + "-update.zip"
+	case "darwin":
+		return "NexusDesktop-darwin-universal-v" + v + "-update.zip"
+	default:
+		return ""
+	}
+}
+
+func parseSHA256SUMS(body, filename string) (string, error) {
+	want := strings.ToLower(filename)
+	for _, line := range strings.Split(body, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		name := strings.TrimPrefix(fields[len(fields)-1], "*")
+		if strings.EqualFold(filepath.Base(name), want) {
+			return strings.ToLower(fields[0]), nil
+		}
+	}
+	return "", fmt.Errorf("SHA256SUMS 中没有 %s", filename)
+}
+
+func fileSHA256(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+func verifyUpdateZip(version, zipPath, userAgent string) error {
+	sumsURL := checksumsURLFor(version)
+	if sumsURL == "" {
+		return fmt.Errorf("无法构造 SHA256SUMS URL")
+	}
+	client := &http.Client{Timeout: 30 * time.Second}
+	req, err := http.NewRequest("GET", sumsURL, nil)
+	if err != nil {
+		return err
+	}
+	if userAgent != "" {
+		req.Header.Set("User-Agent", userAgent)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("下载 SHA256SUMS 失败: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("下载 SHA256SUMS 失败: HTTP %d", resp.StatusCode)
+	}
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return err
+	}
+	want, err := parseSHA256SUMS(string(raw), filepath.Base(zipPath))
+	if err != nil {
+		name := updateZipNameFor(runtime.GOOS, version)
+		want, err = parseSHA256SUMS(string(raw), name)
+		if err != nil {
+			return err
+		}
+	}
+	got, err := fileSHA256(zipPath)
+	if err != nil {
+		return err
+	}
+	if !strings.EqualFold(got, want) {
+		return fmt.Errorf("更新包校验失败")
+	}
+	return nil
 }
 
 func downloadUpdateZip(version, dest, userAgent string) error {

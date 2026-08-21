@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -319,7 +320,12 @@ func (m *Manager) scanPortsParallel() []InstanceInfo {
 }
 
 func (m *Manager) probeStatus(port int) *InstanceInfo {
-	client := &http.Client{Timeout: probeTimeout}
+	client := &http.Client{
+		Timeout: probeTimeout,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 	resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/status", port))
 	if err != nil {
 		return nil
@@ -334,22 +340,8 @@ func (m *Manager) probeStatus(port int) *InstanceInfo {
 		return nil
 	}
 	server, _ := body["server"].(string)
-	if len(server) == 0 {
-		// 兼容 server 字段不存在的旧版本：检查是否有 projectName
-		if _, hasPrj := body["projectName"]; !hasPrj {
-			return nil
-		}
-	} else {
-		found := false
-		for i := 0; i < len(server); i++ {
-			if i+5 <= len(server) && (server[i:i+5] == "nexus" || server[i:i+5] == "Nexus") {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return nil
-		}
+	if !strings.Contains(strings.ToLower(server), "nexus") {
+		return nil
 	}
 	wsPort, _ := body["wsPort"].(float64)
 	if wsPort == 0 {
@@ -362,6 +354,7 @@ func (m *Manager) probeStatus(port int) *InstanceInfo {
 		EngineVersion: stringField(body, "engineVersion"),
 		NetRole:       stringField(body, "netRole"),
 		ToolsListMode: stringField(body, "toolsListMode"),
+		AuthToken:     ReadAuthToken(port),
 	}
 	return info
 }
@@ -405,6 +398,16 @@ func (m *Manager) ConnectTo(port int, setPreferred bool) bool {
 	conn, _, err := dialer.Dial(fmt.Sprintf("ws://127.0.0.1:%d", info.WsPort), nil)
 	if err != nil {
 		log.Warnf("WS 连接失败 port=%d: %v", port, err)
+		return false
+	}
+
+	token := info.AuthToken
+	if token == "" {
+		token = ReadAuthToken(port)
+	}
+	if !authWebSocket(conn, token) {
+		_ = conn.Close()
+		log.Warnf("WS auth 失败 port=%d", port)
 		return false
 	}
 
@@ -748,6 +751,14 @@ func (m *Manager) ForwardToolCallToPort(port int, params map[string]interface{})
 	}
 	defer conn.Close()
 
+	token := info.AuthToken
+	if token == "" {
+		token = ReadAuthToken(port)
+	}
+	if !authWebSocket(conn, token) {
+		return WsRequestResult{Status: "disconnected"}
+	}
+
 	id := atomic.AddInt64(&m.idCounter, 1)
 	req := map[string]interface{}{
 		"jsonrpc": "2.0",
@@ -878,6 +889,30 @@ func (m *Manager) sendWsRequest(method string, params map[string]interface{}, ti
 		log.Warnf("WS 超时 method=%s id=%d", method, id)
 		return WsRequestResult{Status: "timeout"}
 	}
+}
+
+func authWebSocket(conn *websocket.Conn, token string) bool {
+	if token == "" {
+		return false
+	}
+	req := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      0,
+		"method":  "auth",
+		"params":  map[string]interface{}{"token": token},
+	}
+	if err := conn.WriteJSON(req); err != nil {
+		return false
+	}
+	_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	defer conn.SetReadDeadline(time.Time{})
+	var resp map[string]interface{}
+	if err := conn.ReadJSON(&resp); err != nil {
+		return false
+	}
+	result, _ := resp["result"].(map[string]interface{})
+	ok, _ := result["ok"].(bool)
+	return ok
 }
 
 // Dispose 释放所有资源。

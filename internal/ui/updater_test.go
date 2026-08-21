@@ -124,3 +124,16 @@ func TestSupportsInPlaceUpdate(t *testing.T) {
 		t.Fatal("dev build must not apply in-place update")
 	}
 }
+
+func TestParseSHA256SUMS(t *testing.T) {
+	body := "abc123  NexusDesktop-windows-amd64-v1.2.3-update.zip\n" +
+		"def456 *NexusDesktop-darwin-universal-v1.2.3-update.zip\n"
+	got, err := parseSHA256SUMS(body, "NexusDesktop-windows-amd64-v1.2.3-update.zip")
+	if err != nil || got != "abc123" {
+		t.Fatalf("windows zip: got %q err %v", got, err)
+	}
+	got, err = parseSHA256SUMS(body, "NexusDesktop-darwin-universal-v1.2.3-update.zip")
+	if err != nil || got != "def456" {
+		t.Fatalf("darwin zip: got %q err %v", got, err)
+	}
+}

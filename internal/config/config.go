@@ -6,6 +6,8 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -29,12 +31,14 @@ type Config struct {
 	WriteGate string `json:"writeGate"`
 	// Language 是界面语言：auto（跟随系统，默认）、zh-CN、en。
 	Language string `json:"language"`
+	// ProxyToken 是 Agent → 本机 MCP HTTP 的 Bearer。
+	ProxyToken string `json:"proxyToken"`
 }
 
 // DefaultConfig 返回内置默认配置。
 func DefaultConfig() Config {
 	return Config{
-		Enabled:             true,
+		Enabled:             false,
 		HTTPPort:            6700,
 		ScanPortStart:       45000,
 		ScanPortEnd:         45100,
@@ -78,6 +82,7 @@ func Load() (Config, error) {
 	cfg := DefaultConfig()
 	data, err := os.ReadFile(configPath())
 	if os.IsNotExist(err) {
+		ensureProxyToken(&cfg)
 		current = cfg
 		return cfg, nil
 	}
@@ -90,6 +95,7 @@ func Load() (Config, error) {
 		return current, err
 	}
 	sanitize(&cfg)
+	ensureProxyToken(&cfg)
 	current = cfg
 	return cfg, nil
 }
@@ -104,12 +110,13 @@ func Get() Config {
 // Save 将 cfg 写入磁盘，并更新内存缓存，触发变更回调。
 func Save(cfg Config) error {
 	sanitize(&cfg)
+	ensureProxyToken(&cfg)
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return err
 	}
 	_ = os.MkdirAll(AppDir(), 0o755)
-	if err := os.WriteFile(configPath(), data, 0o644); err != nil {
+	if err := os.WriteFile(configPath(), data, 0o600); err != nil {
 		return err
 	}
 	mu.Lock()
@@ -161,4 +168,15 @@ func sanitize(c *Config) {
 	default:
 		c.Language = "auto"
 	}
+}
+
+func ensureProxyToken(c *Config) {
+	if c.ProxyToken != "" {
+		return
+	}
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return
+	}
+	c.ProxyToken = hex.EncodeToString(b)
 }

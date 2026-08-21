@@ -13,6 +13,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - perf(mcp): `handleInitialize` 的连接状态文案改为固定句（以 tools/list 为准），避免随 WS 通断打穿 Prompt Cache
 - docs: README 改为本产品落地页；全家桶端口与开关矩阵改链 NexusLink `docs/usage-guide.md`
+- 新安装默认关闭中转服务器（已有 `config.json` 不变）
+
+### Security
+
+- MCP `/stream` 须 Bearer 且拒绝 Origin；去掉 CORS `*`；body 上限 1MB
+- 连 UE 时读实例注册表 token，WebSocket 首帧 `auth`；`GET /status` 须含 nexus 且不跟随重定向
+- 应用内更新校验 GitHub Release `SHA256SUMS`；CI 钉死 Inno SHA256、w64devkit 体积、`goversioninfo@v1.5.0`
 
 ### Fixed
 

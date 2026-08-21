@@ -45,6 +45,9 @@ func ApplyInPlaceUpdate(currentVersion, latestVersion string) error {
 	if err := downloadUpdateZip(latest, zipPath, ua); err != nil {
 		return err
 	}
+	if err := verifyUpdateZip(latest, zipPath, ua); err != nil {
+		return err
+	}
 	if err := extractZip(zipPath, extractDir); err != nil {
 		return fmt.Errorf("解压更新包失败: %w", err)
 	}

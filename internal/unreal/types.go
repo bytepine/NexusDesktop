@@ -11,4 +11,5 @@ type InstanceInfo struct {
 	// NetRole: DedicatedServer / ListenServer / Client / Standalone / Editor
 	NetRole       string
 	ToolsListMode string
+	AuthToken     string
 }

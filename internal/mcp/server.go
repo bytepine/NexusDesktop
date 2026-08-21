@@ -22,6 +22,7 @@ const (
 	mcpSessionHeader = "Mcp-Session-Id"
 	maxSessions      = 50
 	sseKeepaliveMs   = 20_000 * time.Millisecond
+	maxBodyBytes     = 1024 * 1024
 )
 
 // Server 是 NexusDesktop 的 MCP HTTP 服务器。
@@ -40,7 +41,8 @@ type Server struct {
 	sessionOrder []string               // 插入序，用于 LRU 淘汰
 	sseClients   []*sseClient
 
-	Port int
+	Port       int
+	proxyToken string
 }
 
 type sseClient struct {
@@ -50,11 +52,12 @@ type sseClient struct {
 }
 
 // NewServer 创建 MCP HTTP 服务器实例。
-func NewServer(mgr *unreal.Manager, version string) *Server {
+func NewServer(mgr *unreal.Manager, version, proxyToken string) *Server {
 	return &Server{
-		manager:  mgr,
-		version:  version,
-		sessions: make(map[string]*Dispatcher),
+		manager:    mgr,
+		version:    version,
+		proxyToken: proxyToken,
+		sessions:   make(map[string]*Dispatcher),
 	}
 }
 
@@ -72,7 +75,7 @@ func (s *Server) Start(preferredPort int) (int, error) {
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf("127.0.0.1:%d", port),
-		Handler: mux,
+		Handler: http.HandlerFunc(s.guard(mux)),
 	}
 	s.httpServer = srv
 
@@ -158,12 +161,29 @@ func (s *Server) SendToolsChangedNotification() {
 	}
 }
 
+func (s *Server) guard(next http.Handler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Origin") != "" {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "Browser Origin is not allowed"})
+			return
+		}
+		auth := r.Header.Get("Authorization")
+		const prefix = "Bearer "
+		presented := ""
+		if len(auth) >= len(prefix) && strings.EqualFold(auth[:len(prefix)], prefix) {
+			presented = strings.TrimSpace(auth[len(prefix):])
+		}
+		if s.proxyToken == "" || presented != s.proxyToken {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Missing or invalid Authorization: Bearer token"})
+			return
+		}
+		next.ServeHTTP(w, r)
+	}
+}
+
 // handleStream 处理 POST /stream（Streamable HTTP）和 GET /stream（SSE）。
 func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
-	addCORSHeaders(w)
 	switch r.Method {
-	case http.MethodOptions:
-		w.WriteHeader(http.StatusNoContent)
 	case http.MethodPost:
 		s.handlePost(w, r)
 	case http.MethodGet:
@@ -175,11 +195,6 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 
 // handleSSEEndpoint 处理 GET /sse（旧版 MCP 客户端兼容入口）。
 func (s *Server) handleSSEEndpoint(w http.ResponseWriter, r *http.Request) {
-	addCORSHeaders(w)
-	if r.Method == http.MethodOptions {
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		return
@@ -188,10 +203,15 @@ func (s *Server) handleSSEEndpoint(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePost(w http.ResponseWriter, r *http.Request) {
+	if r.ContentLength > maxBodyBytes {
+		writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "payload too large"})
+		return
+	}
+	limited := http.MaxBytesReader(w, r.Body, maxBodyBytes)
 	var sb strings.Builder
 	buf := make([]byte, 4096)
 	for {
-		n, err := r.Body.Read(buf)
+		n, err := limited.Read(buf)
 		if n > 0 {
 			sb.Write(buf[:n])
 		}
@@ -322,13 +342,6 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 // ------------------------------------------------------------
 // 工具函数
 // ------------------------------------------------------------
-
-func addCORSHeaders(w http.ResponseWriter) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Mcp-Session-Id")
-	w.Header().Set("Access-Control-Expose-Headers", "Mcp-Session-Id")
-}
 
 func writeJSON(w http.ResponseWriter, code int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")

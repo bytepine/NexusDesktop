@@ -74,7 +74,7 @@ Install and enable NexusLink, then check **Enable MCP Server** ([usage-guide §2
 | Select UE instance | Switch instance |
 | Scan UE instances | Manual port scan |
 | Pause / resume agent forwarding | Queue remote calls at the proxy |
-| ✓ Enable proxy | Toggle MCP HTTP (default `:6700`) |
+| ✓ Enable proxy | Toggle MCP HTTP (default `:6700`; **off for new installs**) |
 | Copy MCP client config | Copy JSON |
 | Check for updates | Download zip update and restart |
 | Settings… | Open settings |
@@ -84,13 +84,16 @@ Install and enable NexusLink, then check **Enable MCP Server** ([usage-guide §2
 
 ### 3. AI client
 
-**Cursor** (`~/.cursor/mcp.json`):
+**Cursor** (`~/.cursor/mcp.json`). Copy the snippet (including token) from the tray:
 
 ```json
 {
   "mcpServers": {
     "nexus-unreal": {
-      "url": "http://127.0.0.1:6700/stream"
+      "url": "http://127.0.0.1:6700/stream",
+      "headers": {
+        "Authorization": "Bearer <token>"
+      }
     }
   }
 }
@@ -102,7 +105,7 @@ Double-click the tray icon or **Settings…**. Closing the window hides it to th
 
 | Setting | Default | Notes |
 |---------|---------|-------|
-| Enable proxy | On | Master switch |
+| Enable proxy | Off | Master switch; existing `config.json` is unchanged |
 | MCP HTTP port | 6700 | AI client port; listen restarts immediately after save |
 | UE scan start / end | 45000 / 45100 | Discovery range |
 | Scan interval (s) | 5 | Periodic discovery |
