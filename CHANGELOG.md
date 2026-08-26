@@ -5,6 +5,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [2.0.0-beta.2] - 2026-08-26
+
+> ⚠️ Pre-release，非生产环境使用。
+
 ### Added
 
 - feat(mcp): `listenLan` + `remoteUnrealText`；扫描/连接走 `host:port`
