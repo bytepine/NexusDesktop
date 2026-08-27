@@ -13,4 +13,6 @@ type InstanceInfo struct {
 	NetRole       string
 	ToolsListMode string
 	AuthToken     string
+	// AuthRequired 对应 /status.authRequired；旧版无此字段则为 false，跳过 WS auth。
+	AuthRequired bool
 }

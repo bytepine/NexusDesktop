@@ -76,6 +76,7 @@ Install and enable NexusLink, then check **Enable MCP Server** ([usage-guide §2
 | Pause / resume agent forwarding | Queue remote calls at the proxy |
 | ✓ Enable proxy | Toggle MCP HTTP (default `:6700`; **off for new installs**) |
 | Copy MCP client config | Copy JSON |
+| Copy auth token | Copy the machine-shared token only |
 | Check for updates | Download zip update and restart |
 | Settings… | Open settings |
 | Open log directory | Open logs |
@@ -84,7 +85,7 @@ Install and enable NexusLink, then check **Enable MCP Server** ([usage-guide §2
 
 ### 3. AI client
 
-**Cursor** (`~/.cursor/mcp.json`). Copy the snippet (including token) from the tray:
+**Cursor** (`~/.cursor/mcp.json`). Copy the token from the tray **Copy auth token** or Settings. Multiple tokens: `Bearer <tok1>, <tok2>`. If **Require MCP auth** is off, omit `headers`. See [usage-guide §1.1](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.md#11-鉴权).
 
 ```json
 {
@@ -111,10 +112,12 @@ Double-click the tray icon or **Settings…**. Closing the window hides it to th
 | Scan interval (s) | 5 | Periodic discovery |
 | Write gate | Destructive | Off / destructive (delete, rename, stop PIE) / all writes |
 | Allow LAN | Off | Bind MCP to `0.0.0.0` |
-| Remote UE | (empty) | One `host:port token` per line |
+| Require MCP auth | On | Off: AI clients need no Bearer (legacy proxy); UE WS auth still follows the editor |
+| Extra auth tokens | (empty) | Tokens from other machines; not needed for local UE |
+| Remote UE | (empty) | One `host:port [token...]` per line |
 | Language | Follow system | Simplified Chinese / English |
 
-Cross-machine: [usage-guide §1](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.md).
+Cross-machine and auth: [usage-guide §1](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.md).
 
 ---
 

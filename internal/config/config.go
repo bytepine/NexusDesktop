@@ -12,6 +12,8 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
+	"strings"
 	"sync"
 )
 
@@ -40,6 +42,10 @@ type Config struct {
 	// Language 是界面语言：auto（跟随系统，默认）、zh-CN、en。
 	Language string `json:"language"`
 	ListenLan bool `json:"listenLan"`
+	// RequireAuth 为 true 时 AI→本机 MCP 须 Bearer；缺省视为 true。
+	RequireAuth bool `json:"requireAuth"`
+	// ExtraAuthTokens 其他机器的 token，换行或逗号分隔。
+	ExtraAuthTokens string `json:"extraAuthTokens,omitempty"`
 	// RemoteUnreal 显式远程 UE（不扫网段）。
 	RemoteUnreal []RemoteUnreal `json:"remoteUnreal,omitempty"`
 	// ProxyToken 是 Agent → 本机 MCP HTTP 的 Bearer。
@@ -56,6 +62,7 @@ func DefaultConfig() Config {
 		ScanIntervalSeconds: 5,
 		WriteGate:           "destructive",
 		Language:            "auto",
+		RequireAuth:         true,
 	}
 }
 
@@ -104,6 +111,13 @@ func Load() (Config, error) {
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		current = DefaultConfig()
 		return current, err
+	}
+	// Go bool 零值是 false；旧 config.json 无此键时视为开启
+	var probe struct {
+		RequireAuth *bool `json:"requireAuth"`
+	}
+	if json.Unmarshal(data, &probe) == nil && probe.RequireAuth == nil {
+		cfg.RequireAuth = true
 	}
 	sanitize(&cfg)
 	ensureProxyToken(&cfg)
@@ -182,12 +196,123 @@ func sanitize(c *Config) {
 }
 
 func ensureProxyToken(c *Config) {
-	if c.ProxyToken != "" {
-		return
+	c.ProxyToken = loadOrCreateMachineToken(c.ProxyToken)
+}
+
+func isValidAuthToken(s string) bool {
+	n := len(s)
+	if n < 32 || n > 128 {
+		return false
 	}
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		return
+	for i := 0; i < n; i++ {
+		c := s[i]
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
 	}
-	c.ProxyToken = hex.EncodeToString(b)
+	return true
+}
+
+// ParseAuthTokens 按逗号/分号/空白拆出合法 token，去重保序。
+func ParseAuthTokens(chunks ...string) []string {
+	seen := map[string]struct{}{}
+	var out []string
+	split := func(r rune) bool {
+		return r == ',' || r == ';' || r == ' ' || r == '\t' || r == '\n' || r == '\r'
+	}
+	for _, chunk := range chunks {
+		for _, p := range strings.FieldsFunc(chunk, split) {
+			if !isValidAuthToken(p) {
+				continue
+			}
+			k := strings.ToLower(p)
+			if _, ok := seen[k]; ok {
+				continue
+			}
+			seen[k] = struct{}{}
+			out = append(out, k)
+		}
+	}
+	return out
+}
+
+// TokenAccepted 判断 Bearer 值（可含多个 token）是否命中本机或额外列表。
+func TokenAccepted(presentedRaw, machine, extra string) bool {
+	presented := ParseAuthTokens(presentedRaw)
+	if len(presented) == 0 {
+		return false
+	}
+	accepted := ParseAuthTokens(machine, extra)
+	for _, p := range presented {
+		for _, a := range accepted {
+			if p == a {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func machineAuthTokenPath() string {
+	var base string
+	switch runtime.GOOS {
+	case "windows":
+		base = os.Getenv("LOCALAPPDATA")
+		if base == "" {
+			base = filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Local")
+		}
+	case "darwin":
+		home, _ := os.UserHomeDir()
+		base = filepath.Join(home, "Library", "Application Support")
+	default:
+		base = os.Getenv("XDG_CONFIG_HOME")
+		if base == "" {
+			home, _ := os.UserHomeDir()
+			base = filepath.Join(home, ".config")
+		}
+	}
+	return filepath.Join(base, "NexusLink", "mcp-auth-token")
+}
+
+func readValidTokenFile(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	raw := strings.TrimSpace(string(data))
+	if !isValidAuthToken(raw) {
+		return ""
+	}
+	return strings.ToLower(raw)
+}
+
+// loadOrCreateMachineToken 同机 UE / Desktop / Rider / VSCode 共用一份 token。
+func loadOrCreateMachineToken(seed string) string {
+	path := machineAuthTokenPath()
+	if existing := readValidTokenFile(path); existing != "" {
+		return existing
+	}
+	_ = os.Remove(path)
+	trimmed := strings.TrimSpace(seed)
+	token := trimmed
+	if !isValidAuthToken(trimmed) {
+		b := make([]byte, 32)
+		if _, err := rand.Read(b); err != nil {
+			return trimmed
+		}
+		token = hex.EncodeToString(b)
+	} else {
+		token = strings.ToLower(trimmed)
+	}
+	_ = os.MkdirAll(filepath.Dir(path), 0o755)
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		if won := readValidTokenFile(path); won != "" {
+			return won
+		}
+		return token
+	}
+	_, _ = f.WriteString(token)
+	_ = f.Close()
+	return token
 }

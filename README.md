@@ -76,6 +76,7 @@
 | 暂停 / 恢复 Agent 转发 | 远端调用在代理排队 |
 | ✓ 启用中转服务器 | 启停 MCP HTTP（默认 `:6700`；**新安装默认关**） |
 | 复制 MCP 客户端配置 | 复制 JSON |
+| 复制鉴权 Token | 只复制本机共享 token |
 | 检查更新 | 下载 zip 更新包并重启 |
 | 设置… | 打开设置窗口 |
 | 打开日志目录 | 打开日志 |
@@ -84,7 +85,7 @@
 
 ### 3. AI 客户端
 
-**Cursor**（`~/.cursor/mcp.json`）。Token 从托盘「复制 MCP 客户端配置」取得：
+**Cursor**（`~/.cursor/mcp.json`）。Token 用托盘「复制鉴权 Token」或设置面板。可写多个：`Bearer <tok1>, <tok2>`。关闭「启用 MCP 鉴权」时可不带 `headers`。规则见 [usage-guide §1.1](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.md#11-鉴权)。
 
 ```json
 {
@@ -111,10 +112,12 @@
 | 扫描间隔（秒） | 5 | 定时发现 |
 | 写操作门控 | 破坏性操作 | 关闭 / 破坏性（删除、重命名、停 PIE）/ 全部写操作 |
 | 允许局域网接入 | 关 | MCP 绑 `0.0.0.0` |
-| 远程 UE | （空） | 每行 `host:端口 token` |
+| 启用 MCP 鉴权 | 开 | 关闭后 AI 连本中转无需 Bearer（同旧版）；连 UE 仍看对方鉴权 |
+| 额外鉴权 Token | （空） | 其他机器 token；本机 UE 自动读文件 |
+| 远程 UE | （空） | 每行 `host:端口 [token...]` |
 | 界面语言 | 跟随系统 | 简体中文 / English |
 
-跨机见 [usage-guide §1](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.md)。
+跨机与鉴权见 [usage-guide §1](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.md)。
 
 ---
 

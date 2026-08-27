@@ -191,6 +191,12 @@ func (tc *TrayController) rebuildMenu() {
 	copyConfig := fyne.NewMenuItem(i18n.T("tray.mcp_config"), func() {
 		tc.openConfigWindow()
 	})
+	copyToken := fyne.NewMenuItem(i18n.T("tray.copy_token"), func() {
+		tok := config.Get().ProxyToken
+		if tok != "" {
+			tc.app.Clipboard().SetContent(tok)
+		}
+	})
 
 	// 「设置…」打开设置窗口（懒创建）
 	settingsItem := fyne.NewMenuItem(i18n.T("tray.settings"), func() {
@@ -317,6 +323,7 @@ func (tc *TrayController) rebuildMenu() {
 		disconnectItem,
 		fyne.NewMenuItemSeparator(),
 		copyConfig,
+		copyToken,
 		settingsItem,
 		openLogs,
 		autostartItem,

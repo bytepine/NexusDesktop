@@ -4,6 +4,7 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -98,7 +99,13 @@ func (cw *configWindow) buildContentWithPort(port int) fyne.CanvasObject {
 	})
 	copyBtn.Importance = widget.HighImportance
 
-	topBar := container.NewBorder(nil, nil, nil, copyBtn,
+	copyTokenBtn := widget.NewButton(i18n.T("mcp.copy_token"), func() {
+		if token != "" {
+			cw.app.Clipboard().SetContent(token)
+		}
+	})
+
+	topBar := container.NewBorder(nil, nil, nil, container.NewHBox(copyTokenBtn, copyBtn),
 		container.NewHBox(streamBtn, sseBtn),
 	)
 
@@ -115,42 +122,46 @@ func (cw *configWindow) setConfigText(text string) {
 }
 
 func buildStreamConfig(port int, token string, host string) string {
+	headers := mcpAuthHeadersJSON(token)
 	return fmt.Sprintf(
 		i18n.T("mcp.comment_cursor")+"\n"+
 			"\"nexus-unreal\": {\n"+
-			"  \"url\": \"http://%s:%d/stream\",\n"+
-			"  \"headers\": {\n"+
-			"    \"Authorization\": \"Bearer %s\"\n"+
-			"  }\n"+
+			"  \"url\": \"http://%s:%d/stream\"%s\n"+
 			"}\n\n"+
 			"# CodeBuddy / Windsurf\n"+
 			"\"Nexus\": {\n"+
 			"  \"url\": \"http://%s:%d/stream\",\n"+
-			"  \"transportType\": \"streamable-http\",\n"+
-			"  \"headers\": {\n"+
-			"    \"Authorization\": \"Bearer %s\"\n"+
-			"  }\n"+
+			"  \"transportType\": \"streamable-http\"%s\n"+
 			"}",
-		host, port, token, host, port, token,
+		host, port, headers, host, port, headers,
 	)
 }
 
 func buildSseConfig(port int, token string, host string) string {
+	headers := mcpAuthHeadersJSON(token)
 	return fmt.Sprintf(
 		i18n.T("mcp.comment_cursor")+"\n"+
 			"\"nexus-unreal\": {\n"+
-			"  \"url\": \"http://%s:%d/sse\",\n"+
-			"  \"headers\": {\n"+
-			"    \"Authorization\": \"Bearer %s\"\n"+
-			"  }\n"+
+			"  \"url\": \"http://%s:%d/sse\"%s\n"+
 			"}\n\n"+
 			"# CodeBuddy / Windsurf\n"+
 			"\"Nexus\": {\n"+
-			"  \"url\": \"http://%s:%d/sse\",\n"+
-			"  \"headers\": {\n"+
-			"    \"Authorization\": \"Bearer %s\"\n"+
-			"  }\n"+
+			"  \"url\": \"http://%s:%d/sse\"%s\n"+
 			"}",
-		host, port, token, host, port, token,
+		host, port, headers, host, port, headers,
 	)
+}
+
+func mcpAuthHeadersJSON(token string) string {
+	if !config.Get().RequireAuth {
+		return ""
+	}
+	tokens := config.ParseAuthTokens(token, config.Get().ExtraAuthTokens)
+	if len(tokens) == 0 {
+		return ""
+	}
+	return ",\n" +
+		"  \"headers\": {\n" +
+		"    \"Authorization\": \"Bearer " + strings.Join(tokens, ", ") + "\"\n" +
+		"  }"
 }

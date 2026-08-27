@@ -20,6 +20,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/bytepine/NexusDesktop/internal/config"
 	"github.com/bytepine/NexusDesktop/internal/log"
 	"github.com/bytepine/NexusDesktop/internal/proxy"
 	"github.com/gorilla/websocket"
@@ -373,14 +374,21 @@ func (m *Manager) probeStatus(port int, host string, tokenOverride string) *Inst
 	if wsPort == 0 {
 		wsPort = float64(port + 10000)
 	}
+	authToken := tokenOverride
+	if authToken == "" && probeHost == LoopbackHost {
+		authToken = ReadAuthToken(port)
+	}
+	authRequired, _ := body["authRequired"].(bool)
 	info := &InstanceInfo{
+		Host:          probeHost,
 		Port:          port,
 		WsPort:        int(wsPort),
 		ProjectName:   stringField(body, "projectName"),
 		EngineVersion: stringField(body, "engineVersion"),
 		NetRole:       stringField(body, "netRole"),
 		ToolsListMode: stringField(body, "toolsListMode"),
-		AuthToken:     ReadAuthToken(port),
+		AuthToken:     authToken,
+		AuthRequired:  authRequired,
 	}
 	return info
 }
@@ -396,19 +404,29 @@ func stringField(m map[string]interface{}, key string) string {
 
 // ConnectTo 通过 WebSocket 连接到指定端口的 UE 实例。
 // setPreferred=true 时记录为 PreferredPort（用户手动选择）。
-func (m *Manager) tokenFor(host string, port int) string {
+func (m *Manager) tokensFor(host string, port int) []string {
 	h := NormalizeHost(host)
 	if h == LoopbackHost {
-		return ReadAuthToken(port)
+		return config.ParseAuthTokens(ReadAuthToken(port), config.Get().ProxyToken)
 	}
+	entry := ""
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	for _, r := range m.RemoteUnreal {
 		if r.Host == h && r.McpPort == port {
-			return r.AuthToken
+			entry = r.AuthToken
+			break
 		}
 	}
-	return ""
+	m.mu.Unlock()
+	return config.ParseAuthTokens(entry, config.Get().ExtraAuthTokens)
+}
+
+func (m *Manager) tokenFor(host string, port int) string {
+	toks := m.tokensFor(host, port)
+	if len(toks) == 0 {
+		return ""
+	}
+	return toks[0]
 }
 
 func (m *Manager) IsConnectedInfo(info InstanceInfo) bool {
@@ -453,14 +471,12 @@ func (m *Manager) ConnectTo(port int, setPreferred bool, hostOpt ...string) bool
 		return false
 	}
 
-	token := info.AuthToken
-	if token == "" {
-		token = m.tokenFor(targetHost, port)
-	}
-	if !authWebSocket(conn, token) {
-		_ = conn.Close()
-		log.Warnf("WS auth 失败 %s:%d", targetHost, port)
-		return false
+	if info.AuthRequired {
+		if !authWebSocketAny(conn, m.tokensFor(targetHost, port)) {
+			_ = conn.Close()
+			log.Warnf("WS auth 失败 %s:%d", targetHost, port)
+			return false
+		}
 	}
 
 	m.mu.Lock()
@@ -814,12 +830,10 @@ func (m *Manager) ForwardToolCallToPort(port int, params map[string]interface{},
 	}
 	defer conn.Close()
 
-	token := info.AuthToken
-	if token == "" {
-		token = m.tokenFor(info.Host, port)
-	}
-	if !authWebSocket(conn, token) {
-		return WsRequestResult{Status: "disconnected"}
+	if info.AuthRequired {
+		if !authWebSocketAny(conn, m.tokensFor(info.Host, port)) {
+			return WsRequestResult{Status: "disconnected"}
+		}
 	}
 
 	id := atomic.AddInt64(&m.idCounter, 1)
@@ -952,6 +966,15 @@ func (m *Manager) sendWsRequest(method string, params map[string]interface{}, ti
 		log.Warnf("WS 超时 method=%s id=%d", method, id)
 		return WsRequestResult{Status: "timeout"}
 	}
+}
+
+func authWebSocketAny(conn *websocket.Conn, tokens []string) bool {
+	for _, t := range tokens {
+		if authWebSocket(conn, t) {
+			return true
+		}
+	}
+	return false
 }
 
 func authWebSocket(conn *websocket.Conn, token string) bool {

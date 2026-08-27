@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bytepine/NexusDesktop/internal/config"
 	"github.com/bytepine/NexusDesktop/internal/log"
 	"github.com/bytepine/NexusDesktop/internal/unreal"
 )
@@ -176,7 +177,8 @@ func (s *Server) guard(next http.Handler) http.HandlerFunc {
 		if len(auth) >= len(prefix) && strings.EqualFold(auth[:len(prefix)], prefix) {
 			presented = strings.TrimSpace(auth[len(prefix):])
 		}
-		if s.proxyToken == "" || presented != s.proxyToken {
+		cfg := config.Get()
+		if cfg.RequireAuth && !config.TokenAccepted(presented, s.proxyToken, cfg.ExtraAuthTokens) {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Missing or invalid Authorization: Bearer token"})
 			return
 		}

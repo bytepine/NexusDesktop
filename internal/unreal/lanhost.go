@@ -29,7 +29,7 @@ func InstanceKey(host string, port int) string {
 	return NormalizeHost(host) + ":" + strconv.Itoa(port)
 }
 
-// ParseRemoteText 每行 host:mcpPort token。
+// ParseRemoteText 每行 host:mcpPort [token...]；token 可省略。
 func ParseRemoteText(text string) []RemoteUnreal {
 	var out []RemoteUnreal
 	for _, line := range strings.Split(text, "\n") {
@@ -37,14 +37,14 @@ func ParseRemoteText(text string) []RemoteUnreal {
 		if t == "" || strings.HasPrefix(t, "#") {
 			continue
 		}
-		sp := strings.IndexByte(t, ' ')
-		if sp <= 0 {
-			continue
+		addr := t
+		token := ""
+		if sp := strings.IndexByte(t, ' '); sp > 0 {
+			addr = strings.TrimSpace(t[:sp])
+			token = strings.TrimSpace(t[sp+1:])
 		}
-		addr := strings.TrimSpace(t[:sp])
-		token := strings.TrimSpace(t[sp+1:])
 		colon := strings.LastIndexByte(addr, ':')
-		if colon <= 0 || token == "" {
+		if colon <= 0 {
 			continue
 		}
 		host := NormalizeHost(addr[:colon])

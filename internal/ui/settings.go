@@ -64,6 +64,27 @@ func (sw *SettingsWindow) buildContent() {
 	listenLanCheck := widget.NewCheck(i18n.T("settings.listen_lan"), nil)
 	listenLanCheck.SetChecked(cfg.ListenLan)
 
+	requireAuthCheck := widget.NewCheck(i18n.T("settings.require_auth"), nil)
+	requireAuthCheck.SetChecked(cfg.RequireAuth)
+
+	extraTokensEntry := widget.NewMultiLineEntry()
+	extraTokensEntry.SetText(cfg.ExtraAuthTokens)
+	extraTokensEntry.SetPlaceHolder(i18n.T("settings.extra_tokens_placeholder"))
+	extraTokensEntry.Wrapping = fyne.TextWrapOff
+
+	statusLabel := widget.NewLabel("")
+
+	tokenEntry := widget.NewEntry()
+	tokenEntry.SetText(cfg.ProxyToken)
+	tokenEntry.Disable()
+	copyTokenBtn := widget.NewButton(i18n.T("settings.copy_token"), func() {
+		if cfg.ProxyToken == "" {
+			return
+		}
+		fyne.CurrentApp().Clipboard().SetContent(cfg.ProxyToken)
+		statusLabel.SetText(i18n.T("settings.token_copied"))
+	})
+
 	remoteEntry := widget.NewMultiLineEntry()
 	remoteEntry.SetText(formatRemoteLines(cfg.RemoteUnreal))
 	remoteEntry.SetPlaceHolder(i18n.T("settings.remote_placeholder"))
@@ -159,8 +180,6 @@ func (sw *SettingsWindow) buildContent() {
 	})
 	instanceRows = append(instanceRows, refreshBtn)
 
-	statusLabel := widget.NewLabel("")
-
 	saveBtn := widget.NewButton(i18n.T("settings.save"), func() {
 		httpPort, _ := strconv.Atoi(httpPortEntry.Text)
 		scanStart, _ := strconv.Atoi(scanStartEntry.Text)
@@ -170,6 +189,8 @@ func (sw *SettingsWindow) buildContent() {
 		newCfg := config.Get()
 		newCfg.Enabled = enabledCheck.Checked
 		newCfg.ListenLan = listenLanCheck.Checked
+		newCfg.RequireAuth = requireAuthCheck.Checked
+		newCfg.ExtraAuthTokens = extraTokensEntry.Text
 		newCfg.RemoteUnreal = parseRemoteLines(remoteEntry.Text)
 		newCfg.HTTPPort = httpPort
 		newCfg.ScanPortStart = scanStart
@@ -215,6 +236,10 @@ func (sw *SettingsWindow) buildContent() {
 		widget.NewLabelWithStyle(i18n.T("settings.server_section"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		enabledCheck,
 		listenLanCheck,
+		requireAuthCheck,
+		widget.NewLabel(i18n.T("settings.extra_tokens")),
+		extraTokensEntry,
+		container.NewBorder(nil, nil, widget.NewLabel(i18n.T("settings.auth_token")), copyTokenBtn, tokenEntry),
 		container.NewGridWithColumns(2,
 			widget.NewLabel(i18n.T("settings.http_port")),
 			httpPortEntry,
