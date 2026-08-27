@@ -5,6 +5,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [2.0.0-beta.3] - 2026-08-27
+
+> ⚠️ Pre-release，非生产环境使用。
+
 ### Added
 
 - feat(ui): 设置面板展示本机鉴权 Token；托盘 / 配置窗可一键复制 token
