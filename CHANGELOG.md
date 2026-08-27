@@ -5,6 +5,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- ui: 额外鉴权 Token 改为逐条添加/删除，不再手写分号或逗号分隔
+
 ## [2.0.0-beta.3] - 2026-08-27
 
 > ⚠️ Pre-release，非生产环境使用。

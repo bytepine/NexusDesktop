@@ -113,7 +113,7 @@ Double-click the tray icon or **Settings…**. Closing the window hides it to th
 | Write gate | Destructive | Off / destructive (delete, rename, stop PIE) / all writes |
 | Allow LAN | Off | Bind MCP to `0.0.0.0` |
 | Require MCP auth | On | Off: AI clients need no Bearer (legacy proxy); UE WS auth still follows the editor |
-| Extra auth tokens | (empty) | Tokens from other machines; not needed for local UE |
+| Extra auth tokens | (empty) | Add one token per row; not needed for local UE |
 | Remote UE | (empty) | One `host:port [token...]` per line |
 | Language | Follow system | Simplified Chinese / English |
 

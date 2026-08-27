@@ -68,10 +68,7 @@ func (sw *SettingsWindow) buildContent() {
 	requireAuthCheck := widget.NewCheck(i18n.T("settings.require_auth"), nil)
 	requireAuthCheck.SetChecked(cfg.RequireAuth)
 
-	extraTokensEntry := widget.NewMultiLineEntry()
-	extraTokensEntry.SetText(cfg.ExtraAuthTokens)
-	extraTokensEntry.SetPlaceHolder(i18n.T("settings.extra_tokens_placeholder"))
-	extraTokensEntry.Wrapping = fyne.TextWrapOff
+	extraTokensBox, collectExtraTokens := newExtraTokenList(cfg.ExtraAuthTokens)
 
 	statusLabel := widget.NewLabel("")
 
@@ -191,7 +188,7 @@ func (sw *SettingsWindow) buildContent() {
 		newCfg.Enabled = enabledCheck.Checked
 		newCfg.ListenLan = listenLanCheck.Checked
 		newCfg.RequireAuth = requireAuthCheck.Checked
-		newCfg.ExtraAuthTokens = extraTokensEntry.Text
+		newCfg.ExtraAuthTokens = collectExtraTokens()
 		newCfg.RemoteUnreal = parseRemoteLines(remoteEntry.Text)
 		newCfg.HTTPPort = httpPort
 		newCfg.ScanPortStart = scanStart
@@ -237,7 +234,7 @@ func (sw *SettingsWindow) buildContent() {
 		listenLanCheck,
 		requireAuthCheck,
 		widget.NewLabel(i18n.T("settings.extra_tokens")),
-		extraTokensEntry,
+		extraTokensBox,
 		container.NewBorder(nil, nil, widget.NewLabel(i18n.T("settings.auth_token")), copyTokenBtn, tokenEntry),
 		container.NewGridWithColumns(2,
 			widget.NewLabel(i18n.T("settings.http_port")),
@@ -309,4 +306,57 @@ func parseRemoteLines(text string) []config.RemoteUnreal {
 		out = append(out, config.RemoteUnreal{Host: r.Host, McpPort: r.McpPort, AuthToken: r.AuthToken})
 	}
 	return out
+}
+
+// newExtraTokenList 逐条输入额外 token（+ / −），保存时换行拼接。
+func newExtraTokenList(raw string) (fyne.CanvasObject, func() string) {
+	values := config.ParseAuthTokens(raw)
+	if len(values) == 0 {
+		values = []string{""}
+	}
+	entries := make([]*widget.Entry, 0, len(values))
+	for _, v := range values {
+		e := widget.NewEntry()
+		e.SetPlaceHolder(i18n.T("settings.extra_token_placeholder"))
+		e.SetText(v)
+		entries = append(entries, e)
+	}
+	box := container.NewVBox()
+	var rebuild func()
+	rebuild = func() {
+		objs := make([]fyne.CanvasObject, 0, len(entries)+1)
+		for i := range entries {
+			i := i
+			del := widget.NewButton(i18n.T("settings.remove_token"), func() {
+				if len(entries) <= 1 {
+					entries[0].SetText("")
+					return
+				}
+				entries = append(entries[:i], entries[i+1:]...)
+				rebuild()
+			})
+			objs = append(objs, container.NewBorder(nil, nil, nil, del, entries[i]))
+		}
+		add := widget.NewButton(i18n.T("settings.add_token"), func() {
+			e := widget.NewEntry()
+			e.SetPlaceHolder(i18n.T("settings.extra_token_placeholder"))
+			entries = append(entries, e)
+			rebuild()
+		})
+		objs = append(objs, add)
+		box.Objects = objs
+		box.Refresh()
+	}
+	rebuild()
+	collect := func() string {
+		var parts []string
+		for _, e := range entries {
+			t := strings.TrimSpace(e.Text)
+			if t != "" {
+				parts = append(parts, t)
+			}
+		}
+		return strings.Join(parts, "\n")
+	}
+	return box, collect
 }
