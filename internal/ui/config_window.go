@@ -4,7 +4,6 @@ package ui
 
 import (
 	"fmt"
-	"strings"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -18,19 +17,20 @@ import (
 // configWindow 展示 MCP 客户端配置片段，提供 Streamable HTTP / SSE 切换与一键复制。
 // 参考 NexusRider NexusLinkConfigurable 的设计：先选类型，再复制。
 type configWindow struct {
-	app        fyne.App
-	win        fyne.Window
-	area       *widget.Entry
-	configText string
-	lastPort   int
-	kind       string // "" | "stream" | "sse"
+	app          fyne.App
+	win          fyne.Window
+	area         *widget.Entry
+	configText   string
+	lastPort     int
+	kind         string // "" | "stream" | "sse"
+	selectedHost string
 }
 
 func newConfigWindow(app fyne.App) *configWindow {
 	cw := &configWindow{app: app}
 
 	w := app.NewWindow(i18n.T("mcp.title"))
-	w.Resize(fyne.NewSize(540, 400))
+	w.Resize(fyne.NewSize(540, 440))
 	w.SetFixedSize(true)
 	w.SetCloseIntercept(func() { w.Hide() })
 	cw.win = w
@@ -53,6 +53,7 @@ func newConfigWindow(app fyne.App) *configWindow {
 func (cw *configWindow) show(port int) {
 	cw.lastPort = port
 	cw.kind = ""
+	cw.selectedHost = ""
 	cw.setConfigText(i18n.T("mcp.placeholder"))
 	cw.win.SetTitle(i18n.T("mcp.title"))
 	cw.win.SetContent(cw.buildContentWithPort(port))
@@ -64,13 +65,24 @@ func (cw *configWindow) retranslate() {
 	cw.win.SetTitle(i18n.T("mcp.title"))
 	switch cw.kind {
 	case "stream":
-		cw.setConfigText(buildStreamConfig(cw.lastPort, config.Get().ProxyToken, unreal.McpDisplayHost(config.Get().ListenLan)))
+		cw.setConfigText(buildStreamConfig(cw.lastPort, config.Get().ProxyToken, cw.copyHost()))
 	case "sse":
-		cw.setConfigText(buildSseConfig(cw.lastPort, config.Get().ProxyToken, unreal.McpDisplayHost(config.Get().ListenLan)))
+		cw.setConfigText(buildSseConfig(cw.lastPort, config.Get().ProxyToken, cw.copyHost()))
 	default:
 		cw.setConfigText(i18n.T("mcp.placeholder"))
 	}
 	cw.win.SetContent(cw.buildContentWithPort(cw.lastPort))
+}
+
+func (cw *configWindow) copyHost() string {
+	if cw.selectedHost != "" {
+		return cw.selectedHost
+	}
+	auto, _ := unreal.CopyHostChoices(config.Get().ListenLan)
+	if auto != "" {
+		return auto
+	}
+	return unreal.LoopbackHost
 }
 
 func (cw *configWindow) buildContent() fyne.CanvasObject {
@@ -82,13 +94,13 @@ func (cw *configWindow) buildContentWithPort(port int) fyne.CanvasObject {
 	streamBtn := widget.NewButton(i18n.T("mcp.stream"), func() {
 		cw.kind = "stream"
 		cw.lastPort = port
-		cw.setConfigText(buildStreamConfig(port, token, unreal.McpDisplayHost(config.Get().ListenLan)))
+		cw.setConfigText(buildStreamConfig(port, token, cw.copyHost()))
 	})
 
 	sseBtn := widget.NewButton(i18n.T("mcp.sse"), func() {
 		cw.kind = "sse"
 		cw.lastPort = port
-		cw.setConfigText(buildSseConfig(port, token, unreal.McpDisplayHost(config.Get().ListenLan)))
+		cw.setConfigText(buildSseConfig(port, token, cw.copyHost()))
 	})
 
 	copyBtn := widget.NewButton(i18n.T("mcp.copy"), func() {
@@ -109,11 +121,52 @@ func (cw *configWindow) buildContentWithPort(port int) fyne.CanvasObject {
 		container.NewHBox(streamBtn, sseBtn),
 	)
 
+	header := container.NewVBox(topBar)
+	if hostRow := cw.buildHostSelect(); hostRow != nil {
+		header.Add(hostRow)
+	}
+	header.Add(widget.NewSeparator())
+
 	return container.NewBorder(
-		container.NewVBox(topBar, widget.NewSeparator()),
+		header,
 		nil, nil, nil,
 		container.NewScroll(cw.area),
 	)
+}
+
+func (cw *configWindow) buildHostSelect() fyne.CanvasObject {
+	auto, choices := unreal.CopyHostChoices(config.Get().ListenLan)
+	if len(choices) == 0 {
+		cw.selectedHost = auto
+		return nil
+	}
+	labels := make([]string, len(choices))
+	labelToAddr := make(map[string]string, len(choices))
+	for i, c := range choices {
+		labels[i] = unreal.LanAddrLabel(c)
+		labelToAddr[labels[i]] = c.Address
+	}
+	sel := widget.NewSelect(labels, func(s string) {
+		cw.selectedHost = labelToAddr[s]
+		if cw.kind == "stream" {
+			cw.setConfigText(buildStreamConfig(cw.lastPort, config.Get().ProxyToken, cw.selectedHost))
+		} else if cw.kind == "sse" {
+			cw.setConfigText(buildSseConfig(cw.lastPort, config.Get().ProxyToken, cw.selectedHost))
+		}
+	})
+	if cw.selectedHost != "" {
+		for _, c := range choices {
+			if c.Address == cw.selectedHost {
+				sel.SetSelected(unreal.LanAddrLabel(c))
+				break
+			}
+		}
+	}
+	if sel.Selected == "" {
+		sel.SetSelected(labels[0])
+		cw.selectedHost = choices[0].Address
+	}
+	return container.NewBorder(nil, nil, widget.NewLabel(i18n.T("mcp.select_ip")), nil, sel)
 }
 
 func (cw *configWindow) setConfigText(text string) {
@@ -153,15 +206,11 @@ func buildSseConfig(port int, token string, host string) string {
 }
 
 func mcpAuthHeadersJSON(token string) string {
-	if !config.Get().RequireAuth {
-		return ""
-	}
-	tokens := config.ParseAuthTokens(token, config.Get().ExtraAuthTokens)
-	if len(tokens) == 0 {
+	if !config.Get().RequireAuth || token == "" {
 		return ""
 	}
 	return ",\n" +
 		"  \"headers\": {\n" +
-		"    \"Authorization\": \"Bearer " + strings.Join(tokens, ", ") + "\"\n" +
+		"    \"Authorization\": \"Bearer " + token + "\"\n" +
 		"  }"
 }

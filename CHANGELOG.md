@@ -11,7 +11,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
-- feat(mcp): 鉴权 token 改为本机唯一，与 UE / Rider / VSCode 共用 `NexusLink/mcp-auth-token`；新增「启用 MCP 鉴权」（默认开）；额外 Token 与 Bearer 逗号分隔支持多 token；连本机 UE 自动读 token 文件；README 鉴权说明指向 usage-guide §1.1
+- feat(mcp): 鉴权 token 改为本机唯一，与 UE / Rider / VSCode 共用 `NexusLink/mcp-auth-token`；新增「启用 MCP 鉴权」（默认开）；额外 Token 与 Bearer 逗号分隔支持多 token；连本机 UE 自动读 token 文件；复制 MCP 配置时多网卡可选 IP，Bearer 仅本机 token；LAN 且关鉴权时确认；README 鉴权说明指向 usage-guide §1.1
 
 ## [2.0.0-beta.2] - 2026-08-26
 

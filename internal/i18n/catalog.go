@@ -57,6 +57,8 @@ var catalogs = map[string]map[string]string{
 		"settings.close":          "关闭",
 		"settings.language":       "界面语言",
 		"settings.lang_auto":      "跟随系统",
+		"settings.lan_auth_warn_title": "未鉴权的局域网接入",
+		"settings.lan_auth_warn":  "局域网可达且未鉴权时，同网段主机都能控制编辑器。确定继续？不要做公网映射。",
 
 		"mcp.title":          "MCP 客户端配置",
 		"mcp.placeholder":    "← 点击上方按钮生成对应配置",
@@ -64,6 +66,7 @@ var catalogs = map[string]map[string]string{
 		"mcp.sse":            "SSE 配置",
 		"mcp.copy":           "复制",
 		"mcp.copy_token":     "复制 Token",
+		"mcp.select_ip":      "网卡 IP",
 		"mcp.comment_cursor": "# Cursor  (~/.cursor/mcp.json → mcpServers)",
 
 		"gate.title":   "Nexus MCP",
@@ -126,6 +129,8 @@ var catalogs = map[string]map[string]string{
 		"settings.close":          "Close",
 		"settings.language":       "Language",
 		"settings.lang_auto":      "Follow system",
+		"settings.lan_auth_warn_title": "LAN without auth",
+		"settings.lan_auth_warn":  "LAN bind with auth off lets anyone on the subnet control the editor. Continue? Do not expose this port to the internet.",
 
 		"mcp.title":          "MCP Client Configuration",
 		"mcp.placeholder":    "← Click a button above to generate config",
@@ -133,6 +138,7 @@ var catalogs = map[string]map[string]string{
 		"mcp.sse":            "SSE config",
 		"mcp.copy":           "Copy",
 		"mcp.copy_token":     "Copy token",
+		"mcp.select_ip":      "NIC IP",
 		"mcp.comment_cursor": "# Cursor  (~/.cursor/mcp.json → mcpServers)",
 
 		"gate.title":   "Nexus MCP",

@@ -9,6 +9,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/bytepine/NexusDesktop/internal/config"
@@ -204,27 +205,25 @@ func (sw *SettingsWindow) buildContent() {
 		default:
 			newCfg.WriteGate = "destructive"
 		}
-		if err := config.Save(newCfg); err != nil {
-			statusLabel.SetText(i18n.T("settings.save_failed", err.Error()))
-			log.Errorf("设置保存失败: %v", err)
+		old := config.Get()
+		enteredDanger := newCfg.ListenLan && !newCfg.RequireAuth && !(old.ListenLan && !old.RequireAuth)
+		apply := func() {
+			sw.applySavedConfig(newCfg, statusLabel)
+		}
+		if enteredDanger {
+			dialog.ShowConfirm(
+				i18n.T("settings.lan_auth_warn_title"),
+				i18n.T("settings.lan_auth_warn"),
+				func(ok bool) {
+					if ok {
+						apply()
+					}
+				},
+				sw.win,
+			)
 			return
 		}
-		scanMin, scanMax := newCfg.ScanPortStart, newCfg.ScanPortEnd
-		if scanMin > scanMax {
-			scanMin, scanMax = scanMax, scanMin
-		}
-		if newCfg.HTTPPort >= scanMin && newCfg.HTTPPort <= scanMax {
-			msg := fmt.Sprintf("MCP 端口 %d 与 UE 扫描区间 [%d, %d] 重叠，可能导致代理端口被误当 UE 实例探测",
-				newCfg.HTTPPort, scanMin, scanMax)
-			statusLabel.SetText(msg)
-			log.Warn(msg)
-		} else {
-			statusLabel.SetText(i18n.T("settings.saved"))
-		}
-		sw.manager.Hub.SetWriteGate(proxy.ParseWriteGate(newCfg.WriteGate))
-		if sw.tray != nil {
-			sw.tray.Refresh()
-		}
+		apply()
 	})
 	saveBtn.Importance = widget.HighImportance
 
@@ -266,6 +265,30 @@ func (sw *SettingsWindow) buildContent() {
 	form.Add(statusLabel)
 
 	sw.win.SetContent(container.NewScroll(form))
+}
+
+func (sw *SettingsWindow) applySavedConfig(newCfg config.Config, statusLabel *widget.Label) {
+	if err := config.Save(newCfg); err != nil {
+		statusLabel.SetText(i18n.T("settings.save_failed", err.Error()))
+		log.Errorf("设置保存失败: %v", err)
+		return
+	}
+	scanMin, scanMax := newCfg.ScanPortStart, newCfg.ScanPortEnd
+	if scanMin > scanMax {
+		scanMin, scanMax = scanMax, scanMin
+	}
+	if newCfg.HTTPPort >= scanMin && newCfg.HTTPPort <= scanMax {
+		msg := fmt.Sprintf("MCP 端口 %d 与 UE 扫描区间 [%d, %d] 重叠，可能导致代理端口被误当 UE 实例探测",
+			newCfg.HTTPPort, scanMin, scanMax)
+		statusLabel.SetText(msg)
+		log.Warn(msg)
+	} else {
+		statusLabel.SetText(i18n.T("settings.saved"))
+	}
+	sw.manager.Hub.SetWriteGate(proxy.ParseWriteGate(newCfg.WriteGate))
+	if sw.tray != nil {
+		sw.tray.Refresh()
+	}
 }
 
 func formatRemoteLines(list []config.RemoteUnreal) string {

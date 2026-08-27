@@ -75,7 +75,7 @@ Install and enable NexusLink, then check **Enable MCP Server** ([usage-guide §2
 | Scan UE instances | Manual port scan |
 | Pause / resume agent forwarding | Queue remote calls at the proxy |
 | ✓ Enable proxy | Toggle MCP HTTP (default `:6700`; **off for new installs**) |
-| Copy MCP client config | Copy JSON |
+| Copy MCP client config | Copy JSON; pick NIC IP when LAN has multiple addresses; Bearer is this machine's token only |
 | Copy auth token | Copy the machine-shared token only |
 | Check for updates | Download zip update and restart |
 | Settings… | Open settings |
