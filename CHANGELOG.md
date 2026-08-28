@@ -5,58 +5,36 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
-### Changed
-
-- ui: 额外鉴权 Token 改为逐条添加/删除，不再手写分号或逗号分隔
-
-## [2.0.0-beta.3] - 2026-08-27
-
-> ⚠️ Pre-release，非生产环境使用。
-
-### Added
-
-- feat(ui): 设置面板展示本机鉴权 Token；托盘 / 配置窗可一键复制 token
-
-### Changed
-
-- feat(mcp): 鉴权 token 改为本机唯一，与 UE / Rider / VSCode 共用 `NexusLink/mcp-auth-token`；新增「启用 MCP 鉴权」（默认开）；额外 Token 与 Bearer 逗号分隔支持多 token；连本机 UE 自动读 token 文件；复制 MCP 配置时多网卡可选 IP，Bearer 仅本机 token；LAN 且关鉴权时确认；README 鉴权说明指向 usage-guide §1.1
-
-## [2.0.0-beta.2] - 2026-08-26
-
-> ⚠️ Pre-release，非生产环境使用。
-
-### Added
-
-- feat(mcp): `listenLan` + `remoteUnrealText`；扫描/连接走 `host:port`
-
-### Security
-
-- 默认仍绑 loopback；开 LAN 后须 Bearer，勿映射公网
-
-## [2.0.0-beta.1] - 2026-08-21
-
-> ⚠️ Pre-release，非生产环境使用。
-
 ### Added
 
 - feat(mcp): 代理会话层——TTL/section 读缓存、断线 `degraded` 快照、写门控（设置项，默认破坏性操作确认）、托盘暂停/恢复 Agent 转发与最近调用；超大响应落盘临时目录
+- feat(mcp): `listenLan` + `remoteUnrealText`；扫描/连接走 `host:port`
+- feat(ui): 设置面板展示本机鉴权 Token；托盘 / 配置窗可一键复制 token
 
 ### Changed
 
 - perf(mcp): `handleInitialize` 的连接状态文案改为固定句（以 tools/list 为准），避免随 WS 通断打穿 Prompt Cache
 - docs: README 改为本产品落地页；全家桶端口与开关矩阵改链 NexusLink `docs/usage-guide.md`
 - 新安装默认关闭中转服务器（已有 `config.json` 不变）
-
-### Security
-
-- MCP `/stream` 须 Bearer 且拒绝 Origin；去掉 CORS `*`；body 上限 1MB
-- 连 UE 时读实例注册表 token，WebSocket 首帧 `auth`；`GET /status` 须含 nexus 且不跟随重定向
-- 应用内更新校验 GitHub Release `SHA256SUMS`；CI 钉死 Inno SHA256、w64devkit 体积、`goversioninfo@v1.5.0`
+- feat(mcp): 鉴权 token 改为本机唯一，与 UE / Rider / VSCode 共用 `NexusLink/mcp-auth-token`；新增「启用 MCP 鉴权」（默认开）；额外 Token 与 Bearer 逗号分隔支持多 token；连本机 UE 自动读 token 文件；复制 MCP 配置时多网卡可选 IP，Bearer 仅本机 token；LAN 且关鉴权时确认；README 鉴权说明指向 usage-guide §1.1
+- ui: 额外鉴权 Token 改为逐条添加/删除，不再手写分号或逗号分隔
+- chore(ci): 新增 `build.yml`（push / PR 跑 vet + test）；release 增加 `VERSION` 与 tag 一致性门禁、显式 `prerelease` 标记与 Release 名称
 
 ### Fixed
 
 - fix(mcp): `tools/call` 在 Ensure 失败时仍转发一次再重试，与 IDE 代理对齐
 - fix(mcp): 设置保存后立即按 Enabled/端口启停或重启 MCP；扫描参数即时生效；MCP 端口落在扫描区间时告警
+- fix(config): `config.json` 解析失败时先备份为 `config.json.bak`，且启动不再用默认值覆盖回写（原先一次启动就清掉用户设置）
+- fix(updater): 版本比较按 semver 处理预发布后缀——`2.0.0` 现在判定为新于 `2.0.0-beta.N`，beta 用户能收到正式版更新提示
+- fix(mcp): 缺少 `Content-Length` 的超大 body 现在返回 413，而不是带着被截断的内容当 JSON 解析失败
+
+### Security
+
+- MCP `/stream` 须 Bearer 且拒绝 Origin；去掉 CORS `*`；body 上限 1MB
+- Bearer 比对改常量时间（`crypto/subtle`），与 UE / Rider 端一致
+- 连 UE 时读实例注册表 token，WebSocket 首帧 `auth`；`GET /status` 须含 nexus 且不跟随重定向
+- 应用内更新校验 GitHub Release `SHA256SUMS`；CI 钉死 Inno SHA256、w64devkit 体积、`goversioninfo@v1.5.0`
+- 默认仍绑 loopback；开 LAN 后须 Bearer，勿映射公网
 
 ## [1.1.1] - 2026-08-14
 

@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -31,7 +32,8 @@ const (
 //   POST  /stream  — Streamable HTTP，per-session 会话隔离（Mcp-Session-Id）
 //   GET   /stream  — SSE 通知流（Streamable HTTP 规范）
 //   GET   /sse     — SSE 通知流（旧版 MCP 客户端兼容）
-//   OPTIONS *      — CORS 预检
+//
+// 不提供 CORS 预检：带 Origin 的请求一律拒绝（非浏览器客户端）。
 type Server struct {
 	manager    *unreal.Manager
 	version    string
@@ -220,8 +222,14 @@ func (s *Server) handlePost(w http.ResponseWriter, r *http.Request) {
 		if n > 0 {
 			sb.Write(buf[:n])
 		}
-		if err != nil {
+		if err == io.EOF {
 			break
+		}
+		if err != nil {
+			// 超限（ContentLength 缺失时只有这里能拦）不能带着截断的 body 继续，
+			// 否则客户端收到的是 JSON 解析错误而不是 413
+			writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "payload too large"})
+			return
 		}
 	}
 	body := strings.TrimSpace(sb.String())

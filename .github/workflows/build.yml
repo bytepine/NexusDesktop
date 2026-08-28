@@ -1,0 +1,30 @@
+name: Build
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  desktop:
+    name: nexus-desktop
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.25.x"
+
+      # Fyne 走 CGO + OpenGL/X11，缺这些头文件时 internal/ui 无法编译
+      - name: Install GUI build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1-mesa-dev xorg-dev libxkbcommon-dev
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...

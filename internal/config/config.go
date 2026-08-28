@@ -7,6 +7,7 @@ package config
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"os"
@@ -40,8 +41,8 @@ type Config struct {
 	// WriteGate 写操作门控：off / destructive / all。
 	WriteGate string `json:"writeGate"`
 	// Language 是界面语言：auto（跟随系统，默认）、zh-CN、en。
-	Language string `json:"language"`
-	ListenLan bool `json:"listenLan"`
+	Language  string `json:"language"`
+	ListenLan bool   `json:"listenLan"`
 	// RequireAuth 为 true 时 AI→本机 MCP 须 Bearer；缺省视为 true。
 	RequireAuth bool `json:"requireAuth"`
 	// ExtraAuthTokens 其他机器的 token，换行或逗号分隔。
@@ -109,6 +110,8 @@ func Load() (Config, error) {
 		return cfg, err
 	}
 	if err := json.Unmarshal(data, &cfg); err != nil {
+		// 配置损坏/字段类型不兼容时先备份原文件，否则调用方一旦 Save 就把用户设置整体冲掉
+		_ = os.WriteFile(configPath()+".bak", data, 0o600)
 		current = DefaultConfig()
 		return current, err
 	}
@@ -243,14 +246,16 @@ func TokenAccepted(presentedRaw, machine, extra string) bool {
 		return false
 	}
 	accepted := ParseAuthTokens(machine, extra)
+	ok := false
 	for _, p := range presented {
 		for _, a := range accepted {
-			if p == a {
-				return true
+			// 常量时间比较，与 UE / VSCode / Rider 端一致；不提前 return 以免泄漏匹配位置
+			if subtle.ConstantTimeCompare([]byte(p), []byte(a)) == 1 {
+				ok = true
 			}
 		}
 	}
-	return false
+	return ok
 }
 
 func machineAuthTokenPath() string {

@@ -40,8 +40,11 @@ func main() {
 	defer ui.ReleaseLock()
 
 	// 初始化配置与日志（须在 recover 之前，便于 crash.log 落盘到同一目录）
-	cfg, _ := config.Load()
-	_ = config.Save(cfg)
+	cfg, cfgErr := config.Load()
+	// 解析失败时 cfg 是默认值，此时回写等于把用户设置清空（原文件已备份为 config.json.bak）
+	if cfgErr == nil {
+		_ = config.Save(cfg)
+	}
 	i18n.Apply(cfg.Language)
 	nlog.Init(config.AppDir())
 	defer recoverAndLogCrash()

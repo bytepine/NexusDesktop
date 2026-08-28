@@ -23,6 +23,12 @@ func TestIsNewerVersion(t *testing.T) {
 		{"1.0", "1.0.0", false},
 		{"1.0.6-beta.1", "1.0.5", true},
 		{"v1.0.6", "1.0.5", true},
+		// 同主段：正式版新于预发布版，反向不成立
+		{"2.0.0", "2.0.0-beta.3", true},
+		{"2.0.0-beta.3", "2.0.0", false},
+		{"2.0.0-beta.4", "2.0.0-beta.3", true},
+		{"2.0.0-beta.3", "2.0.0-beta.4", false},
+		{"2.0.0-beta.3", "2.0.0-beta.3", false},
 	}
 	for _, c := range cases {
 		if got := IsNewerVersion(c.a, c.b); got != c.want {

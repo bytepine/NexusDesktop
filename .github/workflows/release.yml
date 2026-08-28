@@ -9,8 +9,39 @@ permissions:
   contents: write
 
 jobs:
+  meta:
+    name: Parse version from tag
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Parse version from tag
+        id: meta
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#nexus-desktop-v}"
+          if [ -z "$VERSION" ] || [ "$VERSION" = "$TAG" ]; then
+            echo "Invalid tag: $TAG" >&2
+            exit 1
+          fi
+          FILE_VERSION="$(tr -d '\r\n' < VERSION)"
+          if [ "$FILE_VERSION" != "$VERSION" ]; then
+            echo "VERSION ($FILE_VERSION) != tag ($VERSION)" >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if echo "$VERSION" | grep -qE '\-beta(\.|$)'; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
   build-windows:
     name: Build Windows
+    needs: meta
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -44,8 +75,7 @@ jobs:
 
       - name: Build Windows exe
         run: |
-          $version = "${{ github.ref_name }}".Replace("nexus-desktop-v", "")
-          python scripts/build_desktop.py --version $version --output release --build-type release
+          python scripts/build_desktop.py --version "${{ needs.meta.outputs.version }}" --output release --build-type release
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v7
@@ -57,6 +87,7 @@ jobs:
 
   build-macos:
     name: Build macOS
+    needs: meta
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
@@ -67,9 +98,7 @@ jobs:
 
       - name: Build macOS Universal DMG
         run: |
-          version="${{ github.ref_name }}"
-          version="${version#nexus-desktop-v}"
-          python3 scripts/build_desktop.py --version "$version" --output release --build-type release --arch universal
+          python3 scripts/build_desktop.py --version "${{ needs.meta.outputs.version }}" --output release --build-type release --arch universal
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v7
@@ -81,17 +110,15 @@ jobs:
 
   release:
     name: Create GitHub Release
-    needs: [build-windows, build-macos]
+    needs: [meta, build-windows, build-macos]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
 
       - name: Extract release notes
         run: |
-          version="${{ github.ref_name }}"
-          version="${version#nexus-desktop-v}"
           python3 scripts/extract_release_notes.py \
-            --version "$version" \
+            --version "${{ needs.meta.outputs.version }}" \
             --output release_notes.md \
             --verify
 
@@ -106,6 +133,8 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v3
         with:
+          name: NexusDesktop v${{ needs.meta.outputs.version }}
+          prerelease: ${{ needs.meta.outputs.prerelease == 'true' }}
           body_path: release_notes.md
           files: |
             NexusDesktop-windows-amd64-v*-setup.exe

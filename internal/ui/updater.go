@@ -395,7 +395,9 @@ func parseLatestTagFromURL(rawURL string) string {
 	return tag
 }
 
-// IsNewerVersion 语义版本比较（"X.Y.Z"，忽略 -beta 等后缀的主段）。
+// IsNewerVersion 语义版本比较。
+// 主段（X.Y.Z）不同时按数值比；主段相同时按 semver 规则——正式版新于同主段的预发布版
+// （2.0.0 > 2.0.0-beta.3），两边都是预发布则按后缀字符串比。
 // 返回 true 表示 A 比 B 新（A > B）。
 func IsNewerVersion(a, b string) bool {
 	pa := semverParts(a)
@@ -416,7 +418,31 @@ func IsNewerVersion(a, b string) bool {
 			return va > vb
 		}
 	}
-	return false
+
+	// 主段相同：无预发布后缀者更新（否则 beta 用户永远收不到同主段的正式版）
+	sa := prereleaseSuffix(a)
+	sb := prereleaseSuffix(b)
+	if sa == sb {
+		return false
+	}
+	if sa == "" {
+		return true
+	}
+	if sb == "" {
+		return false
+	}
+	return sa > sb
+}
+
+// prereleaseSuffix 取 semver 预发布/构建后缀（不含分隔符）；正式版返回空串。
+func prereleaseSuffix(v string) string {
+	v = strings.TrimSpace(v)
+	v = strings.TrimPrefix(v, "v")
+	v = strings.TrimPrefix(v, "V")
+	if i := strings.IndexAny(v, "-+"); i >= 0 {
+		return v[i+1:]
+	}
+	return ""
 }
 
 func semverParts(v string) []int {
