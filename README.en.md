@@ -44,7 +44,9 @@ Install scope follows the Python.org Windows installer:
 
 ### In-app updates
 
-Tray **Check for updates** downloads that version’s **zip update package** from GitHub Releases (not the installer), replaces files, and restarts:
+Checks on startup and every 6 hours. Tray **Check for updates** downloads that version’s **zip update package** from GitHub Releases (not the installer), replaces files, and restarts.
+
+**Update channel** in Settings (default **Follow current version**): stable builds only see stable releases; pre-release builds also see newer betas and the same-core stable, or you can switch to **Stable only**. **Include pre-releases** lets a stable install move to a *newer* core beta (never `2.0.0` → `2.0.0-beta.N`).
 
 | Platform | Installer | Update package |
 |----------|-----------|----------------|
@@ -77,7 +79,7 @@ Install and enable NexusLink, then check **Enable MCP Server** ([usage-guide §2
 | ✓ Enable proxy | Toggle MCP HTTP (default `:6700`; **off for new installs**) |
 | Copy MCP client config | Copy JSON; pick NIC IP when LAN has multiple addresses; Bearer is this machine's token only |
 | Copy auth token | Copy the machine-shared token only |
-| Check for updates | Download zip update and restart |
+| Check for updates | Auto-check on startup and every 6 hours; click to download zip and restart |
 | Settings… | Open settings |
 | Open log directory | Open logs |
 | Launch on login | Toggle autostart |
@@ -111,6 +113,7 @@ Double-click the tray icon or **Settings…**. Closing the window hides it to th
 | UE scan start / end | 45000 / 45100 | Discovery range |
 | Scan interval (s) | 5 | Periodic discovery |
 | Write gate | Destructive | Off / destructive (delete, rename, stop PIE) / all writes |
+| Update channel | Follow current version | Stable builds: stable only; pre-releases include betas (or force stable / include pre-releases) |
 | Allow LAN | Off | Bind MCP to `0.0.0.0` |
 | Require MCP auth | On | Off: AI clients need no Bearer (legacy proxy); UE WS auth still follows the editor |
 | Extra auth tokens | (empty) | Add one token per row; not needed for local UE |

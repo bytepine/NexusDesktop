@@ -51,7 +51,15 @@ type Config struct {
 	RemoteUnreal []RemoteUnreal `json:"remoteUnreal,omitempty"`
 	// ProxyToken 是 Agent → 本机 MCP HTTP 的 Bearer。
 	ProxyToken string `json:"proxyToken"`
+	// UpdateChannel：auto（默认，正式仅正式 / 预发布含 beta）/ stable / pre。
+	UpdateChannel string `json:"updateChannel"`
 }
+
+const (
+	UpdateChannelAuto   = "auto"
+	UpdateChannelStable = "stable"
+	UpdateChannelPre    = "pre"
+)
 
 // DefaultConfig 返回内置默认配置。
 func DefaultConfig() Config {
@@ -64,6 +72,7 @@ func DefaultConfig() Config {
 		WriteGate:           "destructive",
 		Language:            "auto",
 		RequireAuth:         true,
+		UpdateChannel:       UpdateChannelAuto,
 	}
 }
 
@@ -195,6 +204,37 @@ func sanitize(c *Config) {
 		}
 	default:
 		c.Language = "auto"
+	}
+	switch c.UpdateChannel {
+	case UpdateChannelAuto, UpdateChannelStable, UpdateChannelPre:
+	default:
+		c.UpdateChannel = UpdateChannelAuto
+	}
+}
+
+// IsPrerelease 判断版本串是否带 semver 预发布后缀（忽略 +build）。
+func IsPrerelease(v string) bool {
+	v = strings.TrimSpace(v)
+	v = strings.TrimPrefix(v, "v")
+	v = strings.TrimPrefix(v, "V")
+	if i := strings.IndexByte(v, '+'); i >= 0 {
+		v = v[:i]
+	}
+	return strings.Contains(v, "-")
+}
+
+// ResolveUpdateChannel 把存盘值解析成 stable 或 pre。auto：当前是预发布则 pre，否则 stable。
+func ResolveUpdateChannel(stored, currentVersion string) string {
+	switch strings.TrimSpace(stored) {
+	case UpdateChannelStable:
+		return UpdateChannelStable
+	case UpdateChannelPre:
+		return UpdateChannelPre
+	default:
+		if IsPrerelease(currentVersion) {
+			return UpdateChannelPre
+		}
+		return UpdateChannelStable
 	}
 }
 

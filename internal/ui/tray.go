@@ -88,6 +88,51 @@ func (tc *TrayController) SetUpdateState(state UpdateState) {
 	})
 }
 
+// RequestCheck 发起检查；silent 时失败不冲掉已有「有更新」状态。可从任意 goroutine 调用。
+func (tc *TrayController) RequestCheck(silent bool) {
+	run := func() {
+		if tc.updateState.Downloading || tc.updateState.Checking {
+			return
+		}
+		if !startCheck(tc.AppVersion, silent, tc.applyCheckResult) {
+			return
+		}
+		tc.updateState.Checking = true
+		tc.updateState.Error = ""
+		tc.updateState.UpToDate = false
+		if tc.deskApp != nil {
+			tc.rebuildMenu()
+		}
+	}
+	if tc.deskApp == nil {
+		run()
+		return
+	}
+	fyne.Do(run)
+}
+
+func (tc *TrayController) applyCheckResult(state UpdateState) {
+	apply := func() {
+		if state.Silent && state.Error != "" && !state.HasUpdate {
+			tc.updateState.Checking = false
+			if tc.deskApp != nil {
+				tc.rebuildMenu()
+			}
+			return
+		}
+		tc.updateState = state
+		if tc.deskApp != nil {
+			tc.rebuildMenu()
+			tc.updateIcon()
+		}
+	}
+	if tc.deskApp == nil {
+		apply()
+		return
+	}
+	fyne.Do(apply)
+}
+
 // Setup 初始化托盘图标与菜单，需在 Fyne 事件循环启动后调用。
 func (tc *TrayController) Setup() {
 	if tc.deskApp == nil {
@@ -259,8 +304,12 @@ func (tc *TrayController) rebuildMenu() {
 		updateLabel = i18n.T("tray.update_need_app_folder")
 	case tc.updateState.HasUpdate && tc.updateState.Error != "":
 		updateLabel = i18n.T("tray.update_failed", ver)
+	case tc.updateState.Error != "":
+		updateLabel = i18n.T("tray.update_check_failed", ver)
 	case tc.updateState.HasUpdate:
 		updateLabel = i18n.T("tray.update_available", tc.updateState.LatestVersion, ver)
+	case tc.updateState.UpToDate:
+		updateLabel = i18n.T("tray.update_latest", ver)
 	default:
 		updateLabel = i18n.T("tray.update_check", ver)
 	}
@@ -285,7 +334,6 @@ func (tc *TrayController) rebuildMenu() {
 					if errors.Is(err, ErrRunFromDMG) {
 						kind = "dmg"
 					} else {
-						// 静默下载/替换失败：打开该版本 Release 页，便于手动下安装包
 						openURL(githubReleasePage(latest))
 					}
 					tc.SetUpdateState(UpdateState{
@@ -301,11 +349,7 @@ func (tc *TrayController) rebuildMenu() {
 			}()
 			return
 		}
-		tc.updateState = UpdateState{Checking: true}
-		tc.rebuildMenu()
-		CheckUpdate(tc.AppVersion, func(state UpdateState) {
-			tc.SetUpdateState(state)
-		})
+		tc.RequestCheck(false)
 	})
 
 	quitItem := fyne.NewMenuItem(i18n.T("tray.quit"), func() {

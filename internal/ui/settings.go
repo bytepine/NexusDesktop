@@ -31,7 +31,7 @@ type SettingsWindow struct {
 func NewSettingsWindow(app fyne.App, mgr *unreal.Manager) *SettingsWindow {
 	sw := &SettingsWindow{manager: mgr}
 	w := app.NewWindow(i18n.T("settings.title"))
-	w.Resize(fyne.NewSize(520, 640))
+	w.Resize(fyne.NewSize(520, 680))
 	w.SetFixedSize(true)
 	// 关闭按钮仅隐藏，不退出
 	w.SetCloseIntercept(func() {
@@ -114,6 +114,21 @@ func (sw *SettingsWindow) buildContent() {
 		gateSelect.SetSelected(gateOpts[2])
 	default:
 		gateSelect.SetSelected(gateOpts[1])
+	}
+
+	channelOpts := []string{
+		i18n.T("settings.update_auto"),
+		i18n.T("settings.update_stable"),
+		i18n.T("settings.update_pre"),
+	}
+	channelSelect := widget.NewSelect(channelOpts, nil)
+	switch cfg.UpdateChannel {
+	case config.UpdateChannelStable:
+		channelSelect.SetSelected(channelOpts[1])
+	case config.UpdateChannelPre:
+		channelSelect.SetSelected(channelOpts[2])
+	default:
+		channelSelect.SetSelected(channelOpts[0])
 	}
 
 	// ---- 界面语言：立即生效并落盘 ----
@@ -202,6 +217,14 @@ func (sw *SettingsWindow) buildContent() {
 		default:
 			newCfg.WriteGate = "destructive"
 		}
+		switch channelSelect.Selected {
+		case i18n.T("settings.update_stable"):
+			newCfg.UpdateChannel = config.UpdateChannelStable
+		case i18n.T("settings.update_pre"):
+			newCfg.UpdateChannel = config.UpdateChannelPre
+		default:
+			newCfg.UpdateChannel = config.UpdateChannelAuto
+		}
 		old := config.Get()
 		enteredDanger := newCfg.ListenLan && !newCfg.RequireAuth && !(old.ListenLan && !old.RequireAuth)
 		apply := func() {
@@ -247,6 +270,8 @@ func (sw *SettingsWindow) buildContent() {
 			scanIntervalEntry,
 			widget.NewLabel(i18n.T("settings.write_gate")),
 			gateSelect,
+			widget.NewLabel(i18n.T("settings.update_channel")),
+			channelSelect,
 			widget.NewLabel(i18n.T("settings.language")),
 			langSelect,
 		),

@@ -10,6 +10,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - feat(mcp): 代理会话层——TTL/section 读缓存、断线 `degraded` 快照、写门控（设置项，默认破坏性操作确认）、托盘暂停/恢复 Agent 转发与最近调用；超大响应落盘临时目录
 - feat(mcp): `listenLan` + `remoteUnrealText`；扫描/连接走 `host:port`
 - feat(ui): 设置面板展示本机鉴权 Token；托盘 / 配置窗可一键复制 token
+- feat(updater): 更新渠道 `auto` / `stable` / `pre`（默认跟随版本：正式不收 beta，预发布可收 beta 且可改成仅正式版）；启动 + 每 6 小时检查；托盘区分检查失败 / 已是最新；semver 按预发布数字段比较（`2.0.0` > `2.0.0-beta.N`，`beta.10` > `beta.9`），只升不降
 
 ### Changed
 
@@ -25,7 +26,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - fix(mcp): `tools/call` 在 Ensure 失败时仍转发一次再重试，与 IDE 代理对齐
 - fix(mcp): 设置保存后立即按 Enabled/端口启停或重启 MCP；扫描参数即时生效；MCP 端口落在扫描区间时告警
 - fix(config): `config.json` 解析失败时先备份为 `config.json.bak`，且启动不再用默认值覆盖回写（原先一次启动就清掉用户设置）
-- fix(updater): 版本比较按 semver 处理预发布后缀——`2.0.0` 现在判定为新于 `2.0.0-beta.N`，beta 用户能收到正式版更新提示
 - fix(mcp): 缺少 `Content-Length` 的超大 body 现在返回 413，而不是带着被截断的内容当 JSON 解析失败
 
 ### Security

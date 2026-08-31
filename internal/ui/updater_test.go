@@ -29,6 +29,12 @@ func TestIsNewerVersion(t *testing.T) {
 		{"2.0.0-beta.4", "2.0.0-beta.3", true},
 		{"2.0.0-beta.3", "2.0.0-beta.4", false},
 		{"2.0.0-beta.3", "2.0.0-beta.3", false},
+		{"2.0.0-beta.10", "2.0.0-beta.9", true},
+		{"2.0.0-beta.9", "2.0.0-beta.10", false},
+		{"2.0.0-rc.1", "2.0.0-beta.9", true},
+		{"2.0.0", "2.0.0+build", false},
+		{"2.0.0+build", "2.0.0", false},
+		{"2.0.0-beta.1", "2.0.0+build", false},
 	}
 	for _, c := range cases {
 		if got := IsNewerVersion(c.a, c.b); got != c.want {
@@ -44,6 +50,7 @@ func TestParseLatestTagFromURL(t *testing.T) {
 	}{
 		{"https://github.com/bytepine/NexusDesktop/releases/tag/nexus-desktop-v1.0.5", "1.0.5"},
 		{"https://github.com/bytepine/NexusDesktop/releases/tag/nexus-desktop-v1.0.5?foo=1", "1.0.5"},
+		{"https://github.com/bytepine/NexusDesktop/releases/tag/nexus-desktop-v2.0.0-beta.3", "2.0.0-beta.3"},
 		{"https://github.com/bytepine/NexusDesktop/releases/tag/v2.0.0", "2.0.0"},
 		{"https://github.com/bytepine/NexusDesktop/releases", ""},
 		{"", ""},
@@ -116,6 +123,69 @@ func TestExtractZipAndFindExe(t *testing.T) {
 	}
 	if string(data) != "fake-exe" {
 		t.Fatalf("content = %q", data)
+	}
+}
+
+func TestParseAtomTags(t *testing.T) {
+	raw := []byte(`<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <title>nexus-desktop-v2.0.0-beta.3</title>
+    <link rel="alternate" href="https://github.com/bytepine/NexusDesktop/releases/tag/nexus-desktop-v2.0.0-beta.3"/>
+  </entry>
+  <entry>
+    <title>nexus-desktop-v1.1.1</title>
+    <link rel="alternate" href="https://github.com/bytepine/NexusDesktop/releases/tag/nexus-desktop-v1.1.1"/>
+  </entry>
+</feed>`)
+	got, err := parseAtomTags(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0] != "2.0.0-beta.3" || got[1] != "1.1.1" {
+		t.Fatalf("got %#v", got)
+	}
+}
+
+func TestSelectUpdate(t *testing.T) {
+	const (
+		stable = "stable"
+		pre    = "pre"
+	)
+	cases := []struct {
+		current, resolved, latest string
+		atom                      []string
+		want                      string
+	}{
+		{"1.1.1", stable, "2.0.0", nil, "2.0.0"},
+		{"1.1.1", pre, "2.0.0", nil, "2.0.0"},
+		{"1.1.1", stable, "1.1.1", []string{"2.0.0-beta.3"}, ""},
+		{"1.1.1", pre, "1.1.1", []string{"2.0.0-beta.3"}, "2.0.0-beta.3"},
+		{"1.1.1", stable, "2.0.0", []string{"2.1.0-beta.1"}, "2.0.0"},
+		{"1.1.1", pre, "2.0.0", []string{"2.1.0-beta.1"}, "2.1.0-beta.1"},
+		{"2.0.0", stable, "2.0.0", []string{"2.0.0-beta.4"}, ""},
+		{"2.0.0", pre, "2.0.0", []string{"2.0.0-beta.4"}, ""},
+		{"2.0.0", pre, "2.0.0", []string{"2.1.0-beta.1"}, "2.1.0-beta.1"},
+		{"2.0.0-beta.3", stable, "1.1.1", nil, ""},
+		{"2.0.0-beta.3", pre, "1.1.1", nil, ""},
+		{"2.0.0-beta.3", pre, "1.1.1", []string{"2.0.0-beta.4"}, "2.0.0-beta.4"},
+		{"2.0.0-beta.3", stable, "2.0.0", nil, "2.0.0"},
+		{"2.0.0-beta.3", pre, "2.0.0", nil, "2.0.0"},
+		{"2.0.0-beta.3", stable, "2.0.0", []string{"2.0.0-beta.4"}, "2.0.0"},
+		{"2.0.0-beta.3", pre, "2.0.0", []string{"2.0.0-beta.4"}, "2.0.0"},
+		{"2.0.0-beta.3", pre, "", []string{"2.0.0-beta.4"}, "2.0.0-beta.4"},
+		{"2.0.0-beta.3", stable, "2.0.0", []string{"2.1.0-beta.1"}, "2.0.0"},
+		{"2.0.0-beta.3", pre, "2.0.0", []string{"2.1.0-beta.1"}, "2.1.0-beta.1"},
+		// pre 并入 latest：atom 没有正式版时仍能 beta→正式
+		{"2.0.0-beta.3", pre, "2.0.0", []string{"2.0.0-beta.3"}, "2.0.0"},
+		{"2.0.0", stable, "2.0.0-beta.4", nil, ""},
+	}
+	for _, c := range cases {
+		got := selectUpdate(c.current, c.resolved, c.latest, c.atom)
+		if got != c.want {
+			t.Errorf("selectUpdate(%q, %q, %q, %v) = %q, want %q",
+				c.current, c.resolved, c.latest, c.atom, got, c.want)
+		}
 	}
 }
 

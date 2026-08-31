@@ -79,8 +79,9 @@ func main() {
 	// 同时触发一次检查更新（事件循环已就绪，goroutine 回调可安全刷新托盘菜单）。
 	fyneApp.Lifecycle().SetOnStarted(func() {
 		ui.SuppressDockIcon()
-		ui.CheckUpdate(appVersion, func(state ui.UpdateState) {
-			tray.SetUpdateState(state)
+		tray.RequestCheck(true)
+		ui.StartPeriodicUpdateCheck(func() {
+			tray.RequestCheck(true)
 		})
 	})
 
@@ -219,6 +220,7 @@ func main() {
 
 	lastHTTPPort := cfg.HTTPPort
 	lastListenLan := cfg.ListenLan
+	lastUpdateChannel := cfg.UpdateChannel
 	warnIfPortOverlap := func(c config.Config) {
 		scanMin, scanMax := c.ScanPortStart, c.ScanPortEnd
 		if scanMin > scanMax {
@@ -238,6 +240,10 @@ func main() {
 		mgr.SetRemoteUnreal(toUnrealRemote(c.RemoteUnreal))
 		mgr.Hub.SetWriteGate(proxy.ParseWriteGate(c.WriteGate))
 		warnIfPortOverlap(c)
+		if c.UpdateChannel != lastUpdateChannel {
+			lastUpdateChannel = c.UpdateChannel
+			tray.RequestCheck(true)
+		}
 		if !c.Enabled {
 			stopServer()
 			stopScanTimer()
