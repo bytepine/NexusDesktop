@@ -213,3 +213,25 @@ func TestParseSHA256SUMS(t *testing.T) {
 		t.Fatalf("darwin zip: got %q err %v", got, err)
 	}
 }
+
+func TestCleanupUpdateTempDir(t *testing.T) {
+	dir := t.TempDir()
+	keep := filepath.Join(dir, "other.txt")
+	stale := filepath.Join(dir, "NexusDesktop-update-9.9.9")
+	if err := os.WriteFile(keep, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(stale, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(stale, "NexusDesktop.exe"), []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cleanupUpdateTempDir(dir)
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Fatalf("stale update dir should be removed, err=%v", err)
+	}
+	if _, err := os.Stat(keep); err != nil {
+		t.Fatalf("unrelated file should remain: %v", err)
+	}
+}

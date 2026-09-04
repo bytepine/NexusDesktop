@@ -739,3 +739,32 @@ func semverParts(v string) []int {
 	}
 	return out
 }
+
+// RunUpdateHelperIfRequested 若本进程是 Windows 静默更新助手则执行替换并返回 true。
+// 必须在 AcquireLock / Fyne 启动之前调用。
+func RunUpdateHelperIfRequested() bool {
+	return runUpdateHelperIfRequested()
+}
+
+// CleanupUpdateTemp 清掉临时目录里 NexusDesktop-update-* 残留（助手无法删除自身所在目录）。
+func CleanupUpdateTemp() {
+	cleanupUpdateTempOnce()
+	go func() {
+		time.Sleep(3 * time.Second)
+		cleanupUpdateTempOnce()
+	}()
+}
+
+func cleanupUpdateTempOnce() {
+	cleanupUpdateTempDir(os.TempDir())
+}
+
+func cleanupUpdateTempDir(tmp string) {
+	matches, err := filepath.Glob(filepath.Join(tmp, "NexusDesktop-update-*"))
+	if err != nil {
+		return
+	}
+	for _, p := range matches {
+		_ = os.RemoveAll(p)
+	}
+}

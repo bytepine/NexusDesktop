@@ -8,3 +8,5 @@ package ui
 func ApplyInPlaceUpdate(currentVersion, latestVersion string) error {
 	return ErrUnsupportedOS
 }
+
+func runUpdateHelperIfRequested() bool { return false }

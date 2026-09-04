@@ -33,11 +33,17 @@ import (
 var appVersion = "dev"
 
 func main() {
+	// Windows 应用内更新助手：替换完成后退出，不抢单实例锁、不进托盘。
+	if ui.RunUpdateHelperIfRequested() {
+		return
+	}
+
 	// 单实例锁：第二个实例直接退出
 	if !ui.AcquireLock() {
 		return
 	}
 	defer ui.ReleaseLock()
+	ui.CleanupUpdateTemp()
 
 	// 初始化配置与日志（须在 recover 之前，便于 crash.log 落盘到同一目录）
 	cfg, cfgErr := config.Load()

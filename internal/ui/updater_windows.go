@@ -5,24 +5,39 @@
 package ui
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
+	"time"
 
+	"golang.org/x/sys/windows"
+
+	"github.com/bytepine/NexusDesktop/internal/config"
 	"github.com/bytepine/NexusDesktop/internal/log"
 )
 
 const (
-	appExeName     = "NexusDesktop.exe"
-	uninstGUID     = `{B8E4D6A2-3C71-4F9E-A5B0-1D7C8E9F2A34}`
-	uninstSubKey   = `Software\Microsoft\Windows\CurrentVersion\Uninstall\` + uninstGUID + `_is1`
-	uninstRegPath  = `HKCU\` + uninstSubKey
-	uninstRegPathM = `HKLM\` + uninstSubKey
+	appExeName      = "NexusDesktop.exe"
+	uninstGUID      = `{B8E4D6A2-3C71-4F9E-A5B0-1D7C8E9F2A34}`
+	uninstSubKey    = `Software\Microsoft\Windows\CurrentVersion\Uninstall\` + uninstGUID + `_is1`
+	updateHelperArg = "--nexus-apply-update"
 )
 
-// ApplyInPlaceUpdate 下载 zip、解出 exe，启动替换脚本后返回；调用方应随后退出。
+// updateHelperParams 由旧进程写给新 exe 的替换参数（JSON，避免路径空格/引号问题）。
+type updateHelperParams struct {
+	Dest       string `json:"dest"`
+	Pid        int    `json:"pid"`
+	Version    string `json:"version"`
+	ExtractDir string `json:"extractDir"`
+	ZipPath    string `json:"zipPath"`
+}
+
+// ApplyInPlaceUpdate 下载 zip、解出 exe，启动无窗口助手后返回；调用方应随后退出。
 func ApplyInPlaceUpdate(currentVersion, latestVersion string) error {
 	if !SupportsInPlaceUpdate(currentVersion) {
 		return ErrDevBuild
@@ -58,8 +73,18 @@ func ApplyInPlaceUpdate(currentVersion, latestVersion string) error {
 		return err
 	}
 
-	batPath := filepath.Join(tmp, "NexusDesktop-update-"+latest+".bat")
-	if err := writeUpdateBat(batPath, newExe, exe, latest, extractDir, zipPath); err != nil {
+	paramPath := filepath.Join(tmp, "NexusDesktop-update-"+latest+".json")
+	raw, err := json.Marshal(updateHelperParams{
+		Dest:       exe,
+		Pid:        os.Getpid(),
+		Version:    latest,
+		ExtractDir: extractDir,
+		ZipPath:    zipPath,
+	})
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(paramPath, raw, 0o600); err != nil {
 		return err
 	}
 
@@ -67,11 +92,159 @@ func ApplyInPlaceUpdate(currentVersion, latestVersion string) error {
 	if elevated {
 		log.Info("安装目录需要提权，将弹出 UAC")
 	}
-	if err := startDetachedBat(batPath, elevated); err != nil {
+	if err := startUpdateHelper(newExe, paramPath, elevated); err != nil {
 		return err
 	}
-	log.Infof("更新脚本已启动，即将退出以替换 %s", exe)
+	log.Infof("更新助手已启动，即将退出以替换 %s", exe)
 	return nil
+}
+
+// runUpdateHelperIfRequested 若以助手参数启动则执行替换并返回 true（不进托盘）。
+// 须在 AcquireLock 之前调用：助手不能抢锁，旧进程退出后才覆盖 exe。
+func runUpdateHelperIfRequested() bool {
+	if len(os.Args) < 3 || os.Args[1] != updateHelperArg {
+		return false
+	}
+	log.Init(config.AppDir())
+	if err := applyUpdateFromParams(os.Args[2]); err != nil {
+		log.Errorf("静默更新失败: %v", err)
+	}
+	return true
+}
+
+func applyUpdateFromParams(paramPath string) error {
+	raw, err := os.ReadFile(paramPath)
+	if err != nil {
+		return err
+	}
+	var p updateHelperParams
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return err
+	}
+	if !validHelperDest(p.Dest) {
+		return fmt.Errorf("非法替换目标: %s", p.Dest)
+	}
+	waitForPidExit(p.Pid, 30*time.Second)
+	src, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	var copyErr error
+	for i := 0; i < 8; i++ {
+		copyErr = replaceFile(src, p.Dest)
+		if copyErr == nil {
+			break
+		}
+		time.Sleep(time.Second)
+	}
+	if copyErr != nil {
+		return copyErr
+	}
+	RepairDisplayVersion(p.Version)
+	if err := startDetachedGUI(p.Dest); err != nil {
+		return fmt.Errorf("启动新版本失败: %w", err)
+	}
+	_ = os.Remove(p.ZipPath)
+	_ = os.Remove(paramPath)
+	return nil
+}
+
+func validHelperDest(dest string) bool {
+	return strings.EqualFold(filepath.Base(dest), appExeName)
+}
+
+func waitForPidExit(pid int, timeout time.Duration) {
+	if pid <= 0 {
+		return
+	}
+	deadline := time.Now().Add(timeout)
+	for isProcessRunning(pid) && time.Now().Before(deadline) {
+		time.Sleep(200 * time.Millisecond)
+	}
+	time.Sleep(300 * time.Millisecond)
+}
+
+func replaceFile(src, dest string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	tmp := dest + ".updating"
+	out, err := os.OpenFile(tmp, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
+	if err != nil {
+		return err
+	}
+	_, copyErr := io.Copy(out, in)
+	closeErr := out.Close()
+	if copyErr != nil {
+		_ = os.Remove(tmp)
+		return copyErr
+	}
+	if closeErr != nil {
+		_ = os.Remove(tmp)
+		return closeErr
+	}
+	_ = os.Remove(dest)
+	if err := os.Rename(tmp, dest); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
+}
+
+func startUpdateHelper(exe, paramPath string, elevated bool) error {
+	if elevated {
+		verb, err := windows.UTF16PtrFromString("runas")
+		if err != nil {
+			return err
+		}
+		file, err := windows.UTF16PtrFromString(exe)
+		if err != nil {
+			return err
+		}
+		args, err := windows.UTF16PtrFromString(updateHelperArg + " " + quoteWinArg(paramPath))
+		if err != nil {
+			return err
+		}
+		if err := windows.ShellExecute(0, verb, file, args, nil, windows.SW_HIDE); err != nil {
+			return fmt.Errorf("提权启动更新助手失败: %w", err)
+		}
+		return nil
+	}
+	cmd := exec.Command(exe, updateHelperArg, paramPath)
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		HideWindow:    true,
+		CreationFlags: windows.DETACHED_PROCESS | windows.CREATE_NEW_PROCESS_GROUP,
+	}
+	cmd.Stdin = nil
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("启动更新助手失败: %w", err)
+	}
+	_ = cmd.Process.Release()
+	return nil
+}
+
+func startDetachedGUI(exe string) error {
+	cmd := exec.Command(exe)
+	cmd.Dir = filepath.Dir(exe)
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		CreationFlags: windows.CREATE_NEW_PROCESS_GROUP,
+	}
+	cmd.Stdin = nil
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	_ = cmd.Process.Release()
+	return nil
+}
+
+func quoteWinArg(s string) string {
+	return `"` + strings.ReplaceAll(s, `"`, `\"`) + `"`
 }
 
 func needsElevation(destExe string) bool {
@@ -84,58 +257,6 @@ func needsElevation(destExe string) bool {
 	_ = f.Close()
 	_ = os.Remove(name)
 	return false
-}
-
-func writeUpdateBat(batPath, srcExe, destExe, version, extractDir, zipPath string) error {
-	src := batQuote(srcExe)
-	dest := batQuote(destExe)
-	ext := batQuote(extractDir)
-	zp := batQuote(zipPath)
-	ver := sanitizeVersion(version)
-	body := fmt.Sprintf(`@echo off
-chcp 65001 >nul
-timeout /t 2 /nobreak >nul
-set RETRIES=8
-:retry
-move /Y %s %s >nul 2>&1
-if not errorlevel 1 goto moved
-set /a RETRIES-=1
-if %%RETRIES%% leq 0 goto fail
-timeout /t 1 /nobreak >nul
-goto retry
-:moved
-reg add "%s" /v DisplayVersion /d "%s" /f >nul 2>&1
-reg add "%s" /v DisplayVersion /d "%s" /f >nul 2>&1
-rd /s /q %s >nul 2>&1
-del /f /q %s >nul 2>&1
-start "" %s
-del "%%~f0"
-exit /b 0
-:fail
-exit /b 1
-`, src, dest, uninstRegPath, ver, uninstRegPathM, ver, ext, zp, dest)
-	return os.WriteFile(batPath, append([]byte{0xEF, 0xBB, 0xBF}, []byte(body)...), 0o755)
-}
-
-func startDetachedBat(batPath string, elevated bool) error {
-	if elevated {
-		ps := fmt.Sprintf(
-			"Start-Process -FilePath 'cmd.exe' -Verb RunAs -ArgumentList '/c', '%s'",
-			strings.ReplaceAll(batPath, "'", "''"),
-		)
-		cmd := exec.Command("powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", ps)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			return fmt.Errorf("提权启动更新脚本失败: %v (%s)", err, strings.TrimSpace(string(out)))
-		}
-		return nil
-	}
-	cmd := exec.Command("cmd", "/C", "start", "", "/MIN", batPath)
-	return cmd.Run()
-}
-
-func batQuote(s string) string {
-	return `"` + s + `"`
 }
 
 func sanitizeVersion(v string) string {

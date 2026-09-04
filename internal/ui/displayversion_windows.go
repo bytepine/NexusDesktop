@@ -14,7 +14,7 @@ import (
 
 // RepairDisplayVersion 把卸载项 DisplayVersion 写成当前 appVersion。
 // 当前用户安装（HKCU）可直接写；全部用户（HKLM）无管理员权限时静默跳过，
-// 由提权更新脚本在替换 exe 时一并写入。
+// 由提权更新助手在替换 exe 时一并写入。
 func RepairDisplayVersion(version string) {
 	v := strings.TrimSpace(version)
 	if v == "" || v == "dev" {

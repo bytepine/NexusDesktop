@@ -44,7 +44,7 @@ Install scope follows the Python.org Windows installer:
 
 ### In-app updates
 
-Checks on startup and every 6 hours. Tray **Check for updates** downloads that version’s **zip update package** from GitHub Releases (not the installer), replaces files, and restarts.
+Checks on startup and every 6 hours. Tray **Check for updates** downloads that version’s **zip update package** from GitHub Releases (not the installer), replaces files, and restarts. On Windows the replace step has no console window.
 
 **Update channel** in Settings (default **Follow current version**): stable builds only see stable releases; pre-release builds also see newer betas and the same-core stable, or you can switch to **Stable only**. **Include pre-releases** lets a stable install move to a *newer* core beta (never `2.0.0` → `2.0.0-beta.N`).
 

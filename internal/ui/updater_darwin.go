@@ -122,3 +122,5 @@ func canReplaceApp(appPath string) bool {
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'"'"'`) + "'"
 }
+
+func runUpdateHelperIfRequested() bool { return false }
