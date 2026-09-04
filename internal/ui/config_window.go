@@ -14,23 +14,35 @@ import (
 	"github.com/bytepine/NexusDesktop/internal/unreal"
 )
 
-// configWindow 展示 MCP 客户端配置片段，提供 Streamable HTTP / SSE 切换与一键复制。
-// 参考 NexusRider NexusLinkConfigurable 的设计：先选类型，再复制。
+const (
+	protoStream     = "stream"
+	protoSSE        = "sse"
+	clientCursor    = "cursor"
+	clientCodeBuddy = "codebuddy"
+)
+
+// configWindow 展示 MCP 客户端配置片段：协议 × 客户端各选一项，复制只写入当前一份。
 type configWindow struct {
 	app          fyne.App
 	win          fyne.Window
 	area         *widget.Entry
 	configText   string
 	lastPort     int
-	kind         string // "" | "stream" | "sse"
+	protocol     string // stream | sse
+	client       string // cursor | codebuddy
 	selectedHost string
+
+	streamBtn    *widget.Button
+	sseBtn       *widget.Button
+	cursorBtn    *widget.Button
+	codebuddyBtn *widget.Button
 }
 
 func newConfigWindow(app fyne.App) *configWindow {
-	cw := &configWindow{app: app}
+	cw := &configWindow{app: app, protocol: protoStream, client: clientCursor}
 
 	w := app.NewWindow(i18n.T("mcp.title"))
-	w.Resize(fyne.NewSize(540, 440))
+	w.Resize(fyne.NewSize(540, 480))
 	w.SetFixedSize(true)
 	w.SetCloseIntercept(func() { w.Hide() })
 	cw.win = w
@@ -45,33 +57,27 @@ func newConfigWindow(app fyne.App) *configWindow {
 			area.SetText(cw.configText)
 		}
 	}
-	cw.setConfigText(i18n.T("mcp.placeholder"))
 	cw.win.SetContent(cw.buildContentWithPort(0))
+	cw.refreshPreview()
 	return cw
 }
 
 func (cw *configWindow) show(port int) {
 	cw.lastPort = port
-	cw.kind = ""
+	cw.protocol = protoStream
+	cw.client = clientCursor
 	cw.selectedHost = ""
-	cw.setConfigText(i18n.T("mcp.placeholder"))
 	cw.win.SetTitle(i18n.T("mcp.title"))
 	cw.win.SetContent(cw.buildContentWithPort(port))
+	cw.refreshPreview()
 	cw.win.Show()
 	cw.win.RequestFocus()
 }
 
 func (cw *configWindow) retranslate() {
 	cw.win.SetTitle(i18n.T("mcp.title"))
-	switch cw.kind {
-	case "stream":
-		cw.setConfigText(buildStreamConfig(cw.lastPort, config.Get().ProxyToken, cw.copyHost()))
-	case "sse":
-		cw.setConfigText(buildSseConfig(cw.lastPort, config.Get().ProxyToken, cw.copyHost()))
-	default:
-		cw.setConfigText(i18n.T("mcp.placeholder"))
-	}
 	cw.win.SetContent(cw.buildContentWithPort(cw.lastPort))
+	cw.refreshPreview()
 }
 
 func (cw *configWindow) copyHost() string {
@@ -85,27 +91,57 @@ func (cw *configWindow) copyHost() string {
 	return unreal.LoopbackHost
 }
 
+func (cw *configWindow) refreshPreview() {
+	token := config.Get().ProxyToken
+	cw.setConfigText(buildMcpConfig(cw.protocol, cw.client, cw.lastPort, token, cw.copyHost()))
+	cw.highlightButtons()
+}
+
+func (cw *configWindow) highlightButtons() {
+	setOn := func(b *widget.Button, on bool) {
+		if b == nil {
+			return
+		}
+		if on {
+			b.Importance = widget.HighImportance
+		} else {
+			b.Importance = widget.MediumImportance
+		}
+		b.Refresh()
+	}
+	setOn(cw.streamBtn, cw.protocol == protoStream)
+	setOn(cw.sseBtn, cw.protocol == protoSSE)
+	setOn(cw.cursorBtn, cw.client == clientCursor)
+	setOn(cw.codebuddyBtn, cw.client == clientCodeBuddy)
+}
+
 func (cw *configWindow) buildContent() fyne.CanvasObject {
 	return cw.buildContentWithPort(0)
 }
 
 func (cw *configWindow) buildContentWithPort(port int) fyne.CanvasObject {
 	token := config.Get().ProxyToken
-	streamBtn := widget.NewButton(i18n.T("mcp.stream"), func() {
-		cw.kind = "stream"
-		cw.lastPort = port
-		cw.setConfigText(buildStreamConfig(port, token, cw.copyHost()))
-	})
+	cw.lastPort = port
 
-	sseBtn := widget.NewButton(i18n.T("mcp.sse"), func() {
-		cw.kind = "sse"
-		cw.lastPort = port
-		cw.setConfigText(buildSseConfig(port, token, cw.copyHost()))
+	cw.streamBtn = widget.NewButton(i18n.T("mcp.stream"), func() {
+		cw.protocol = protoStream
+		cw.refreshPreview()
+	})
+	cw.sseBtn = widget.NewButton(i18n.T("mcp.sse"), func() {
+		cw.protocol = protoSSE
+		cw.refreshPreview()
+	})
+	cw.cursorBtn = widget.NewButton(i18n.T("mcp.cursor"), func() {
+		cw.client = clientCursor
+		cw.refreshPreview()
+	})
+	cw.codebuddyBtn = widget.NewButton(i18n.T("mcp.codebuddy"), func() {
+		cw.client = clientCodeBuddy
+		cw.refreshPreview()
 	})
 
 	copyBtn := widget.NewButton(i18n.T("mcp.copy"), func() {
-		ph := i18n.T("mcp.placeholder")
-		if cw.configText != "" && cw.configText != ph {
+		if cw.configText != "" {
 			cw.app.Clipboard().SetContent(cw.configText)
 		}
 	})
@@ -117,16 +153,18 @@ func (cw *configWindow) buildContentWithPort(port int) fyne.CanvasObject {
 		}
 	})
 
-	topBar := container.NewBorder(nil, nil, nil, container.NewHBox(copyTokenBtn, copyBtn),
-		container.NewHBox(streamBtn, sseBtn),
+	protoRow := container.NewBorder(nil, nil, nil, container.NewHBox(copyTokenBtn, copyBtn),
+		container.NewHBox(cw.streamBtn, cw.sseBtn),
 	)
+	clientRow := container.NewHBox(cw.cursorBtn, cw.codebuddyBtn)
 
-	header := container.NewVBox(topBar)
+	header := container.NewVBox(protoRow, clientRow)
 	if hostRow := cw.buildHostSelect(); hostRow != nil {
 		header.Add(hostRow)
 	}
 	header.Add(widget.NewSeparator())
 
+	cw.highlightButtons()
 	return container.NewBorder(
 		header,
 		nil, nil, nil,
@@ -148,11 +186,7 @@ func (cw *configWindow) buildHostSelect() fyne.CanvasObject {
 	}
 	sel := widget.NewSelect(labels, func(s string) {
 		cw.selectedHost = labelToAddr[s]
-		if cw.kind == "stream" {
-			cw.setConfigText(buildStreamConfig(cw.lastPort, config.Get().ProxyToken, cw.selectedHost))
-		} else if cw.kind == "sse" {
-			cw.setConfigText(buildSseConfig(cw.lastPort, config.Get().ProxyToken, cw.selectedHost))
-		}
+		cw.refreshPreview()
 	})
 	if cw.selectedHost != "" {
 		for _, c := range choices {
@@ -174,34 +208,37 @@ func (cw *configWindow) setConfigText(text string) {
 	cw.area.SetText(text)
 }
 
-func buildStreamConfig(port int, token string, host string) string {
+func buildMcpConfig(protocol, client string, port int, token, host string) string {
 	headers := mcpAuthHeadersJSON(token)
+	path := "/stream"
+	if protocol == protoSSE {
+		path = "/sse"
+	}
+	if client == clientCodeBuddy {
+		if protocol == protoStream {
+			return fmt.Sprintf(
+				i18n.T("mcp.comment_codebuddy")+"\n"+
+					"\"Nexus\": {\n"+
+					"  \"url\": \"http://%s:%d%s\",\n"+
+					"  \"transportType\": \"streamable-http\"%s\n"+
+					"}",
+				host, port, path, headers,
+			)
+		}
+		return fmt.Sprintf(
+			i18n.T("mcp.comment_codebuddy")+"\n"+
+				"\"Nexus\": {\n"+
+				"  \"url\": \"http://%s:%d%s\"%s\n"+
+				"}",
+			host, port, path, headers,
+		)
+	}
 	return fmt.Sprintf(
 		i18n.T("mcp.comment_cursor")+"\n"+
 			"\"nexus-unreal\": {\n"+
-			"  \"url\": \"http://%s:%d/stream\"%s\n"+
-			"}\n\n"+
-			"# CodeBuddy / Windsurf\n"+
-			"\"Nexus\": {\n"+
-			"  \"url\": \"http://%s:%d/stream\",\n"+
-			"  \"transportType\": \"streamable-http\"%s\n"+
+			"  \"url\": \"http://%s:%d%s\"%s\n"+
 			"}",
-		host, port, headers, host, port, headers,
-	)
-}
-
-func buildSseConfig(port int, token string, host string) string {
-	headers := mcpAuthHeadersJSON(token)
-	return fmt.Sprintf(
-		i18n.T("mcp.comment_cursor")+"\n"+
-			"\"nexus-unreal\": {\n"+
-			"  \"url\": \"http://%s:%d/sse\"%s\n"+
-			"}\n\n"+
-			"# CodeBuddy / Windsurf\n"+
-			"\"Nexus\": {\n"+
-			"  \"url\": \"http://%s:%d/sse\"%s\n"+
-			"}",
-		host, port, headers, host, port, headers,
+		host, port, path, headers,
 	)
 }
 

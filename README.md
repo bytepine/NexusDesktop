@@ -77,7 +77,7 @@
 | 扫描 UE 实例 | 主动扫端口 |
 | 暂停 / 恢复 Agent 转发 | 远端调用在代理排队 |
 | ✓ 启用中转服务器 | 启停 MCP HTTP（默认 `:6700`；**新安装默认关**） |
-| 复制 MCP 客户端配置 | 复制 JSON；开 LAN 且多网卡时可选 IP；Bearer 仅本机 token |
+| MCP 客户端配置… | 选协议（Streamable HTTP / SSE）与客户端（Cursor / CodeBuddy）后复制一份 JSON；开 LAN 且多网卡时可选 IP；Bearer 仅本机 token |
 | 复制鉴权 Token | 只复制本机共享 token |
 | 检查更新 | 启动与每 6 小时自动检查；点击下载 zip 并重启 |
 | 设置… | 打开设置窗口 |
