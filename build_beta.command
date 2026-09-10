@@ -89,7 +89,7 @@ fi
 echo
 echo "[2/2] Build successful!"
 echo
-ARTIFACT=$(ls release/NexusDesktop-darwin-universal*.dmg 2>/dev/null | head -1 \
+ARTIFACT=$(ls release/NexusDesktop-darwin-arm64*.dmg 2>/dev/null | head -1 \
         || ls release/NexusDesktop-darwin-*.dmg 2>/dev/null | head -1 \
         || true)
 if [ -n "$ARTIFACT" ]; then

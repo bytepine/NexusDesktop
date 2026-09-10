@@ -8,7 +8,7 @@ cd "$(dirname "$0")"
 echo "============================================"
 echo "  NexusDesktop - Release Build (macOS)"
 echo "  日志级别：INFO（debug 日志不输出）"
-echo "  产物：NexusDesktop-darwin-universal.dmg"
+echo "  产物：NexusDesktop-darwin-arm64.dmg"
 echo "============================================"
 echo
 
@@ -83,8 +83,8 @@ fi
 echo
 echo "[2/2] Release build successful!"
 echo
-ARTIFACT=$(ls release/NexusDesktop-darwin-universal.dmg 2>/dev/null \
-        || ls release/NexusDesktop-darwin-universal*.dmg 2>/dev/null | head -1 \
+ARTIFACT=$(ls release/NexusDesktop-darwin-arm64.dmg 2>/dev/null \
+        || ls release/NexusDesktop-darwin-arm64*.dmg 2>/dev/null | head -1 \
         || ls release/NexusDesktop-darwin-*.dmg 2>/dev/null | head -1 \
         || true)
 if [ -n "$ARTIFACT" ]; then

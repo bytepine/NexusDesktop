@@ -5,6 +5,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- chore(release): macOS 只打 Apple Silicon（arm64）包，产物改为 `NexusDesktop-darwin-arm64.dmg` / `*-arm64-v*-update.zip`，不再打 Universal / Intel；已装旧版的应用内更新会找不到旧文件名，需从 Release 再下一次 DMG
+
 ### Fixed
 
 - fix(updater): Windows 应用内更新改为无窗口助手进程替换 exe，不再弹出命令行

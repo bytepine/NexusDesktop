@@ -96,17 +96,17 @@ jobs:
         with:
           go-version: "1.25.x"
 
-      - name: Build macOS Universal DMG
+      - name: Build macOS Apple Silicon DMG
         run: |
-          python3 scripts/build_desktop.py --version "${{ needs.meta.outputs.version }}" --output release --build-type release --arch universal
+          python3 scripts/build_desktop.py --version "${{ needs.meta.outputs.version }}" --output release --build-type release --arch arm64
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v7
         with:
           name: macos-dmg
           path: |
-            release/NexusDesktop-darwin-universal.dmg
-            release/NexusDesktop-darwin-universal-v*-update.zip
+            release/NexusDesktop-darwin-arm64.dmg
+            release/NexusDesktop-darwin-arm64-v*-update.zip
 
   release:
     name: Create GitHub Release
@@ -139,6 +139,6 @@ jobs:
           files: |
             NexusDesktop-windows-amd64-v*-setup.exe
             NexusDesktop-windows-amd64-v*-update.zip
-            NexusDesktop-darwin-universal.dmg
-            NexusDesktop-darwin-universal-v*-update.zip
+            NexusDesktop-darwin-arm64.dmg
+            NexusDesktop-darwin-arm64-v*-update.zip
             SHA256SUMS

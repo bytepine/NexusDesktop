@@ -334,7 +334,7 @@ func updateZipURLFor(goos, version string) string {
 	case "windows":
 		return githubDownloadBase + tag + "/NexusDesktop-windows-amd64-v" + v + "-update.zip"
 	case "darwin":
-		return githubDownloadBase + tag + "/NexusDesktop-darwin-universal-v" + v + "-update.zip"
+		return githubDownloadBase + tag + "/NexusDesktop-darwin-arm64-v" + v + "-update.zip"
 	default:
 		return ""
 	}
@@ -369,7 +369,7 @@ func updateZipNameFor(goos, version string) string {
 	case "windows":
 		return "NexusDesktop-windows-amd64-v" + v + "-update.zip"
 	case "darwin":
-		return "NexusDesktop-darwin-universal-v" + v + "-update.zip"
+		return "NexusDesktop-darwin-arm64-v" + v + "-update.zip"
 	default:
 		return ""
 	}

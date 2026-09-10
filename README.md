@@ -15,7 +15,7 @@
 | **NexusDesktop** | 下载 Setup.exe / `.dmg`，无需 Go / Node / 运行时 |
 | **NexusLink** | [NexusLink Releases](https://github.com/bytepine/NexusLink/releases)；UE 4.26+ |
 | **Windows** | Windows 10 / 11（amd64） |
-| **macOS** | macOS 12+（Monterey）；Intel / Apple Silicon 通用 |
+| **macOS** | macOS 12+（Monterey）；仅 Apple Silicon（arm64） |
 
 ---
 
@@ -24,7 +24,7 @@
 从 [Releases](https://github.com/bytepine/NexusDesktop/releases) 下载：
 
 - **Windows**：`NexusDesktop-windows-amd64-v<版本号>-setup.exe` — 安装向导，可从「应用和功能」卸载
-- **macOS**：`NexusDesktop-darwin-universal.dmg`（Universal Binary）
+- **macOS**：`NexusDesktop-darwin-arm64.dmg`（仅 Apple Silicon）
 - **不要下载 `*-update.zip`**：那是应用内更新包，不是安装包
 
 ### Windows 安装与卸载
@@ -142,7 +142,7 @@ go build -ldflags "-H=windowsgui -s -w" -o NexusDesktop.exe ./cmd/nexusdesktop/
 
 ```bash
 python3 scripts/build_desktop.py --build-type develop
-# release：python3 scripts/build_desktop.py --build-type release --arch universal
+# release：python3 scripts/build_desktop.py --build-type release --arch arm64
 ```
 
 或 `./build.command`。

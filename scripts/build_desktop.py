@@ -18,8 +18,8 @@ build_desktop.py — NexusDesktop 跨平台构建脚本
         - -s -w 裁剪符号，减小体积
         - Windows 产物：NexusDesktop-windows-amd64-v<ver>-setup.exe（安装包，需 Inno Setup 7）
                        + NexusDesktop-windows-amd64-v<ver>-update.zip（更新包，内含 exe）
-        - macOS 产物：NexusDesktop-darwin-universal.dmg（安装包）
-                     + NexusDesktop-darwin-universal-v<ver>-update.zip（更新包，内含 .app）
+        - macOS 产物：NexusDesktop-darwin-arm64.dmg（安装包，仅 Apple Silicon）
+                     + NexusDesktop-darwin-arm64-v<ver>-update.zip（更新包，内含 .app）
 
 平台要求：
     Windows : GCC 14.x（如 w64devkit v1.23.0）。
@@ -398,29 +398,15 @@ def _go_build_binary(
         raise RuntimeError(f"go build {goos}/{goarch} 失败（返回码 {result.returncode}）")
 
 
-def _lipo_merge(arm64_bin: str, amd64_bin: str, out_path: str) -> None:
-    """用 lipo 将 arm64 + amd64 合并为 Universal Binary；失败抛 RuntimeError。"""
-    if not shutil.which("lipo"):
-        raise RuntimeError("未找到 lipo，请安装 Xcode Command Line Tools")
-    result = subprocess.run(
-        ["lipo", "-create", "-output", out_path, arm64_bin, amd64_bin]
-    )
-    if result.returncode != 0:
-        raise RuntimeError("lipo 合并失败")
-    size_mb = os.path.getsize(out_path) / (1024 * 1024)
-    print(f"[build] Universal Binary：{size_mb:.1f} MB → {out_path}")
-
-
 def build_desktop(
     version: str,
     output_dir: str,
     build_type: str = "develop",
-    arch_target: str = "auto",
+    arch_target: str = "arm64",
 ) -> str:
     """
     build_type : "develop" | "release"
-    arch_target: macOS 专用 — "universal"（默认）| "arm64" | "amd64"
-                 其他平台忽略此参数。
+    arch_target: macOS 专用 — 仅 "arm64"（Apple Silicon）。其他平台忽略此参数。
     """
     is_release = build_type == "release"
     log_level = "info" if is_release else "debug"
@@ -475,29 +461,18 @@ def build_desktop(
             f"-X {_LOG_PKG}.Level={log_level}"
         )
 
-        # 决定目标架构
-        if arch_target in ("auto", "universal"):
-            target_arch = "universal"
-        elif arch_target in ("arm64", "amd64"):
-            target_arch = arch_target
+        # 仅 Apple Silicon；不再打 Intel / Universal
+        if arch_target in ("auto", "arm64"):
+            target_arch = "arm64"
         else:
-            raise RuntimeError(f"不支持的 arch_target: {arch_target}")
+            raise RuntimeError(
+                f"不支持的 arch_target: {arch_target}（macOS 仅打包 arm64 / Apple Silicon）"
+            )
 
-        if target_arch == "universal":
-            # 分别编译 arm64 / amd64，再 lipo 合并
-            arm64_tmp = os.path.join(output_dir, f"_nexusdesktop-arm64{suffix}")
-            amd64_tmp = os.path.join(output_dir, f"_nexusdesktop-amd64{suffix}")
-            _go_build_binary(go, env, root, "darwin", "arm64", arm64_tmp, ldflags)
-            _go_build_binary(go, env, root, "darwin", "amd64", amd64_tmp, ldflags)
-            out_path = os.path.join(output_dir, f"NexusDesktop-darwin-universal{suffix}")
-            _lipo_merge(arm64_tmp, amd64_tmp, out_path)
-            os.remove(arm64_tmp)
-            os.remove(amd64_tmp)
-        else:
-            out_path = os.path.join(output_dir, f"NexusDesktop-darwin-{target_arch}{suffix}")
-            _go_build_binary(go, env, root, "darwin", target_arch, out_path, ldflags)
-            size_mb = os.path.getsize(out_path) / (1024 * 1024)
-            print(f"[build] 产物大小：{size_mb:.1f} MB")
+        out_path = os.path.join(output_dir, f"NexusDesktop-darwin-{target_arch}{suffix}")
+        _go_build_binary(go, env, root, "darwin", target_arch, out_path, ldflags)
+        size_mb = os.path.getsize(out_path) / (1024 * 1024)
+        print(f"[build] 产物大小：{size_mb:.1f} MB")
 
         app_path = _package_macos_app(
             root, out_path, version, output_dir, target_arch, is_release,
@@ -697,9 +672,9 @@ def main() -> int:
     )
     parser.add_argument(
         "--arch",
-        default="universal",
-        choices=["universal", "arm64", "amd64"],
-        help="macOS 目标架构：universal（默认，arm64+amd64）| arm64 | amd64",
+        default="arm64",
+        choices=["arm64"],
+        help="macOS 目标架构：仅 arm64（Apple Silicon）",
     )
     args = parser.parse_args()
 

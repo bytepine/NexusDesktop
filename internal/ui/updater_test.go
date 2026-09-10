@@ -69,7 +69,7 @@ func TestUpdateZipURLFor(t *testing.T) {
 		t.Errorf("windows url = %q, want %q", win, wantWin)
 	}
 	mac := updateZipURLFor("darwin", "1.2.3")
-	wantMac := "https://github.com/bytepine/NexusDesktop/releases/download/nexus-desktop-v1.2.3/NexusDesktop-darwin-universal-v1.2.3-update.zip"
+	wantMac := "https://github.com/bytepine/NexusDesktop/releases/download/nexus-desktop-v1.2.3/NexusDesktop-darwin-arm64-v1.2.3-update.zip"
 	if mac != wantMac {
 		t.Errorf("darwin url = %q, want %q", mac, wantMac)
 	}
@@ -203,12 +203,12 @@ func TestSupportsInPlaceUpdate(t *testing.T) {
 
 func TestParseSHA256SUMS(t *testing.T) {
 	body := "abc123  NexusDesktop-windows-amd64-v1.2.3-update.zip\n" +
-		"def456 *NexusDesktop-darwin-universal-v1.2.3-update.zip\n"
+		"def456 *NexusDesktop-darwin-arm64-v1.2.3-update.zip\n"
 	got, err := parseSHA256SUMS(body, "NexusDesktop-windows-amd64-v1.2.3-update.zip")
 	if err != nil || got != "abc123" {
 		t.Fatalf("windows zip: got %q err %v", got, err)
 	}
-	got, err = parseSHA256SUMS(body, "NexusDesktop-darwin-universal-v1.2.3-update.zip")
+	got, err = parseSHA256SUMS(body, "NexusDesktop-darwin-arm64-v1.2.3-update.zip")
 	if err != nil || got != "def456" {
 		t.Fatalf("darwin zip: got %q err %v", got, err)
 	}

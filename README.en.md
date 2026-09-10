@@ -15,7 +15,7 @@ Ports and switch layers: [NexusLink usage guide](https://github.com/bytepine/Nex
 | **NexusDesktop** | Download Setup.exe / `.dmg` — no Go / Node / runtime |
 | **NexusLink** | [NexusLink Releases](https://github.com/bytepine/NexusLink/releases); UE 4.26+ |
 | **Windows** | Windows 10 / 11 (amd64) |
-| **macOS** | macOS 12+ (Monterey); Intel / Apple Silicon Universal |
+| **macOS** | macOS 12+ (Monterey); Apple Silicon (arm64) only |
 
 ---
 
@@ -24,7 +24,7 @@ Ports and switch layers: [NexusLink usage guide](https://github.com/bytepine/Nex
 From [Releases](https://github.com/bytepine/NexusDesktop/releases):
 
 - **Windows**: `NexusDesktop-windows-amd64-v<version>-setup.exe` — installer; uninstall from Apps & features
-- **macOS**: `NexusDesktop-darwin-universal.dmg` (Universal Binary)
+- **macOS**: `NexusDesktop-darwin-arm64.dmg` (Apple Silicon only)
 - **Do not download `*-update.zip`**: that is the in-app update package, not an installer
 
 ### Windows install & uninstall
@@ -142,7 +142,7 @@ Or `build.bat`. GCC 16+ (binutils 2.46+) produces BigOBJ that Go CGO does not su
 
 ```bash
 python3 scripts/build_desktop.py --build-type develop
-# release: python3 scripts/build_desktop.py --build-type release --arch universal
+# release: python3 scripts/build_desktop.py --build-type release --arch arm64
 ```
 
 Or `./build.command`.
