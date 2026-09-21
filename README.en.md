@@ -85,6 +85,8 @@ Install and enable NexusLink, then check **Enable MCP Server** ([usage-guide §2
 | Launch on login | Toggle autostart |
 | Quit | Exit |
 
+A single instance auto-connects; multiple instances prefer `hostKind=Editor` (legacy UE without that field falls back to `netRole=Editor`).
+
 ### 3. AI client
 
 **Cursor** (`~/.cursor/mcp.json`). Copy the token from the tray **Copy auth token** or Settings. Multiple tokens: `Bearer <tok1>, <tok2>`. If **Require MCP auth** is off, omit `headers`. See [usage-guide §1.1](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.md#11-鉴权).

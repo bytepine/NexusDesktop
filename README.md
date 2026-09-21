@@ -85,6 +85,8 @@
 | 开机自启 | 切换 |
 | 退出 | 退出程序 |
 
+唯一实例自动连接；多实例优先 `hostKind=Editor`（旧 UE 无该字段时回落 `netRole=Editor`）。
+
 ### 3. AI 客户端
 
 **Cursor**（`~/.cursor/mcp.json`）。Token 用托盘「复制鉴权 Token」或设置面板。可写多个：`Bearer <tok1>, <tok2>`。关闭「启用 MCP 鉴权」时可不带 `headers`。规则见 [usage-guide §1.1](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.md#11-鉴权)。
