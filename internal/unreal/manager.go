@@ -277,12 +277,7 @@ func (m *Manager) DiscoverInstances() []InstanceInfo {
 			}
 		}
 		if target == nil {
-			for i := range found {
-				if found[i].NetRole == "editor" || found[i].NetRole == "Editor" {
-					target = &found[i]
-					break
-				}
-			}
+			target = pickEditorInstance(found)
 		}
 		if target == nil {
 			target = &found[0]
@@ -386,6 +381,8 @@ func (m *Manager) probeStatus(port int, host string, tokenOverride string) *Inst
 		ProjectName:   stringField(body, "projectName"),
 		EngineVersion: stringField(body, "engineVersion"),
 		NetRole:       stringField(body, "netRole"),
+		HostKind:      stringField(body, "hostKind"),
+		HasPlayWorld:  boolPtrField(body, "hasPlayWorld"),
 		ToolsListMode: stringField(body, "toolsListMode"),
 		AuthToken:     authToken,
 		AuthRequired:  authRequired,
@@ -396,6 +393,31 @@ func (m *Manager) probeStatus(port int, host string, tokenOverride string) *Inst
 func stringField(m map[string]interface{}, key string) string {
 	v, _ := m[key].(string)
 	return v
+}
+
+func boolPtrField(m map[string]interface{}, key string) *bool {
+	v, ok := m[key].(bool)
+	if !ok {
+		return nil
+	}
+	return &v
+}
+
+func pickEditorInstance(found []InstanceInfo) *InstanceInfo {
+	if len(found) == 0 {
+		return nil
+	}
+	for i := range found {
+		if strings.EqualFold(found[i].HostKind, "Editor") {
+			return &found[i]
+		}
+	}
+	for i := range found {
+		if found[i].HostKind == "" && strings.EqualFold(found[i].NetRole, "Editor") {
+			return &found[i]
+		}
+	}
+	return &found[0]
 }
 
 // ------------------------------------------------------------

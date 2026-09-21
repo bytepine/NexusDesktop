@@ -318,6 +318,12 @@ func (d *Dispatcher) handleListInstances(id interface{}) (string, error) {
 		if info.NetRole != "" {
 			entry["netRole"] = info.NetRole
 		}
+		if info.HostKind != "" {
+			entry["hostKind"] = info.HostKind
+		}
+		if info.HasPlayWorld != nil {
+			entry["hasPlayWorld"] = *info.HasPlayWorld
+		}
 		arr = append(arr, entry)
 	}
 	if arr == nil {

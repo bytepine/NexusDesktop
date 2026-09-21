@@ -8,6 +8,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Changed
 
 - chore(release): macOS 只打 Apple Silicon（arm64）包，产物改为 `NexusDesktop-darwin-arm64.dmg` / `*-arm64-v*-update.zip`，不再打 Universal / Intel；已装旧版的应用内更新会找不到旧文件名，需从 Release 再下一次 DMG
+- feat(unreal): 多实例自动连接优先 `hostKind=Editor`（旧 UE 无该字段时回落 `netRole=Editor`）；`list_unreal_instances` 透出 `hostKind` / `hasPlayWorld`
 
 ### Fixed
 
