@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"sync"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -35,6 +36,8 @@ type TrayController struct {
 	// 注入钩子：由 main 提供，用于热重启服务器
 	OnToggleServer     func(enabled bool)
 	OnRefreshInstances func()
+	// ListenPort 返回当前实际监听端口；未监听时返回 0。
+	ListenPort func() int
 
 	// 版本信息：由 main 注入当前版本，检查更新后写入结果
 	AppVersion  string
@@ -71,6 +74,11 @@ func (tc *TrayController) openConfigWindow() {
 		tc.configWin = newConfigWindow(tc.app)
 	}
 	port := config.Get().HTTPPort
+	if tc.ListenPort != nil {
+		if actual := tc.ListenPort(); actual > 0 {
+			port = actual
+		}
+	}
 	tc.configWin.show(port)
 }
 
@@ -406,16 +414,22 @@ func (tc *TrayController) updateIcon() {
 // PromptGate 弹出写操作确认窗（Allow / Deny / Always），供 SessionHub 回调。
 func (tc *TrayController) PromptGate(info proxy.CallInfo) proxy.GateDecision {
 	ch := make(chan proxy.GateDecision, 1)
+	var once sync.Once
+	reply := func(d proxy.GateDecision) {
+		once.Do(func() { ch <- d })
+	}
 	suffix := ""
 	if info.Identity != "" {
 		suffix = " → " + info.Identity
 	}
 	fyne.Do(func() {
 		w := tc.app.NewWindow(i18n.T("gate.title"))
+		// 点按钮会先 reply 再 Close；关窗按钮只走 OnClosed，视为拒绝。
+		w.SetOnClosed(func() { reply(proxy.DecisionDeny) })
 		msg := widget.NewLabel(i18n.T("gate.message", info.Capability, suffix))
-		allow := widget.NewButton(i18n.T("gate.allow"), func() { ch <- proxy.DecisionAllow; w.Close() })
-		deny := widget.NewButton(i18n.T("gate.deny"), func() { ch <- proxy.DecisionDeny; w.Close() })
-		always := widget.NewButton(i18n.T("gate.always"), func() { ch <- proxy.DecisionAlways; w.Close() })
+		allow := widget.NewButton(i18n.T("gate.allow"), func() { reply(proxy.DecisionAllow); w.Close() })
+		deny := widget.NewButton(i18n.T("gate.deny"), func() { reply(proxy.DecisionDeny); w.Close() })
+		always := widget.NewButton(i18n.T("gate.always"), func() { reply(proxy.DecisionAlways); w.Close() })
 		w.SetContent(container.NewVBox(msg, container.NewHBox(allow, deny, always)))
 		w.Resize(fyne.NewSize(480, 140))
 		w.Show()

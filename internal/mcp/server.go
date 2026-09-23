@@ -23,6 +23,7 @@ import (
 const (
 	mcpSessionHeader = "Mcp-Session-Id"
 	maxSessions      = 50
+	maxSSEClients    = 32
 	sseKeepaliveMs   = 20_000 * time.Millisecond
 	maxBodyBytes     = 1024 * 1024
 )
@@ -49,9 +50,9 @@ type Server struct {
 }
 
 type sseClient struct {
-	w      http.ResponseWriter
+	w       http.ResponseWriter
 	flusher http.Flusher
-	done   chan struct{}
+	done    chan struct{}
 }
 
 // NewServer 创建 MCP HTTP 服务器实例。
@@ -80,8 +81,10 @@ func (s *Server) Start(preferredPort int, bindHost string) (int, error) {
 	mux.HandleFunc("/sse", s.handleSSEEndpoint)
 
 	srv := &http.Server{
-		Addr:    fmt.Sprintf("%s:%d", bindHost, port),
-		Handler: http.HandlerFunc(s.guard(mux)),
+		Addr:              fmt.Sprintf("%s:%d", bindHost, port),
+		Handler:           http.HandlerFunc(s.guard(mux)),
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 	s.httpServer = srv
 
@@ -303,16 +306,21 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "SSE not supported", http.StatusInternalServerError)
 		return
 	}
+	s.mu.Lock()
+	if len(s.sseClients) >= maxSSEClients {
+		s.mu.Unlock()
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "too many SSE clients"})
+		return
+	}
+	client := &sseClient{w: w, flusher: flusher, done: make(chan struct{})}
+	s.sseClients = append(s.sseClients, client)
+	s.mu.Unlock()
+
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.WriteHeader(http.StatusOK)
 	flusher.Flush()
-
-	client := &sseClient{w: w, flusher: flusher, done: make(chan struct{})}
-	s.mu.Lock()
-	s.sseClients = append(s.sseClients, client)
-	s.mu.Unlock()
 
 	// 心跳 goroutine
 	go func() {

@@ -299,9 +299,7 @@ func (m *Manager) scanPortsParallel() []InstanceInfo {
 	start := m.ScanPortStart
 	end := m.ScanPortEnd
 	m.mu.Unlock()
-	if start > end {
-		start, end = end, start
-	}
+	start, end = config.ClampScanPorts(start, end)
 
 	var mu2 sync.Mutex
 	var found []InstanceInfo

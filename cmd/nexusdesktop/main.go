@@ -205,6 +205,15 @@ func main() {
 		}
 	}
 
+	tray.ListenPort = func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		if server == nil {
+			return 0
+		}
+		return server.Port
+	}
+
 	// 注入托盘回调
 	tray.OnToggleServer = func(enabled bool) {
 		if enabled {

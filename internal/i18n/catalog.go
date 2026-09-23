@@ -67,6 +67,11 @@ var catalogs = map[string]map[string]string{
 		"settings.lang_auto":               "跟随系统",
 		"settings.lan_auth_warn_title":     "未鉴权的局域网接入",
 		"settings.lan_auth_warn":           "局域网可达且未鉴权时，同网段主机都能控制编辑器。确定继续？不要做公网映射。",
+		"settings.remote_plain_warn_title": "远程 UE 明文连接",
+		"settings.remote_plain_warn":       "连远程 UE 走明文 WebSocket，鉴权 token 可被同网段看到。确定继续？",
+		"settings.invalid_port":            "端口须为 1024–65535 的数字",
+		"settings.invalid_interval":        "扫描间隔须为不小于 1 的整数秒",
+		"settings.scan_span_too_wide":      "扫描区间不能超过 %d 个端口",
 
 		"mcp.title":             "MCP 客户端配置",
 		"mcp.stream":            "Streamable HTTP",
@@ -149,6 +154,11 @@ var catalogs = map[string]map[string]string{
 		"settings.lang_auto":               "Follow system",
 		"settings.lan_auth_warn_title":     "LAN without auth",
 		"settings.lan_auth_warn":           "LAN bind with auth off lets anyone on the subnet control the editor. Continue? Do not expose this port to the internet.",
+		"settings.remote_plain_warn_title": "Plaintext remote UE",
+		"settings.remote_plain_warn":       "Remote UE uses plaintext WebSocket; tokens on that link can be seen on the subnet. Continue?",
+		"settings.invalid_port":            "Port must be a number from 1024 to 65535",
+		"settings.invalid_interval":        "Scan interval must be an integer ≥ 1 second",
+		"settings.scan_span_too_wide":      "Scan range cannot exceed %d ports",
 
 		"mcp.title":             "MCP Client Configuration",
 		"mcp.stream":            "Streamable HTTP",

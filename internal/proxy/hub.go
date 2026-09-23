@@ -11,6 +11,14 @@ import (
 	"time"
 )
 
+const (
+	offloadMaxAge   = time.Hour
+	offloadDirPerm  = 0o700
+	offloadFilePerm = 0o600
+)
+
+var offloadRoot = filepath.Join(os.TempDir(), "nexus-mcp-offload")
+
 type CacheEntry struct {
 	ExactKey      string
 	IdentityKey   string
@@ -40,23 +48,22 @@ type GatePrompter func(CallInfo) GateDecision
 
 // Hub 进程级会话枢纽。
 type Hub struct {
-	mu          sync.Mutex
-	writeGate   WriteGateMode
-	paused      bool
-	pauseWait   *sync.Cond
-	alwaysAllow map[string]struct{}
-	cache       []*CacheEntry // LRU：尾部最新
-	activity    *ActivityState
-	prompter    GatePrompter
-	OnActivity  func()
+	mu         sync.Mutex
+	writeGate  WriteGateMode
+	paused     bool
+	pauseWait  *sync.Cond
+	cache      []*CacheEntry // LRU：尾部最新
+	activity   *ActivityState
+	prompter   GatePrompter
+	OnActivity func()
 }
 
 func NewHub() *Hub {
 	h := &Hub{
-		writeGate:   GateDestructive,
-		alwaysAllow: map[string]struct{}{},
+		writeGate: GateDestructive,
 	}
 	h.pauseWait = sync.NewCond(&h.mu)
+	purgeOffload()
 	return h
 }
 
@@ -130,16 +137,14 @@ func (h *Hub) WaitIfPaused() {
 	h.mu.Unlock()
 }
 
+// ConfirmIfNeeded 需要确认时调用 prompter。
+// DecisionAlways 原样返回，由当前 MCP 会话自己记住；Hub 不跨会话缓存。
 func (h *Hub) ConfirmIfNeeded(info CallInfo) GateDecision {
 	h.mu.Lock()
 	mode := h.writeGate
-	_, always := h.alwaysAllow[info.Capability]
 	prompter := h.prompter
 	h.mu.Unlock()
 	if !NeedsGate(mode, info.Capability, info.InnerArgs) {
-		return DecisionAllow
-	}
-	if always {
 		return DecisionAllow
 	}
 	if prompter == nil {
@@ -149,12 +154,6 @@ func (h *Hub) ConfirmIfNeeded(info CallInfo) GateDecision {
 	go func() { ch <- prompter(info) }()
 	select {
 	case d := <-ch:
-		if d == DecisionAlways {
-			h.mu.Lock()
-			h.alwaysAllow[info.Capability] = struct{}{}
-			h.mu.Unlock()
-			return DecisionAllow
-		}
 		return d
 	case <-time.After(time.Duration(GateTimeoutMS) * time.Millisecond):
 		return DecisionDeny
@@ -256,11 +255,11 @@ func (h *Hub) invalidateIdentity(identity string) {
 }
 
 func (h *Hub) offload(result interface{}) interface{} {
-	dir := filepath.Join(os.TempDir(), "nexus-mcp-offload")
-	_ = os.MkdirAll(dir, 0o755)
-	file := filepath.Join(dir, "offload-"+strconv.FormatInt(time.Now().UnixMilli(), 10)+".json")
+	pruneOffload(offloadMaxAge)
+	_ = os.MkdirAll(offloadRoot, offloadDirPerm)
+	file := filepath.Join(offloadRoot, "offload-"+strconv.FormatInt(time.Now().UnixMilli(), 10)+".json")
 	b, _ := json.Marshal(result)
-	_ = os.WriteFile(file, b, 0o644)
+	_ = os.WriteFile(file, b, offloadFilePerm)
 	summary := map[string]interface{}{
 		"content": []interface{}{map[string]interface{}{
 			"type": "text",
@@ -269,6 +268,33 @@ func (h *Hub) offload(result interface{}) interface{} {
 		"isError": false,
 	}
 	return InjectProxyMeta(summary, map[string]interface{}{"offloaded": true, "path": file, "bytes": len(b)})
+}
+
+func purgeOffload() {
+	entries, err := os.ReadDir(offloadRoot)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		_ = os.RemoveAll(filepath.Join(offloadRoot, e.Name()))
+	}
+}
+
+func pruneOffload(maxAge time.Duration) {
+	entries, err := os.ReadDir(offloadRoot)
+	if err != nil {
+		return
+	}
+	cutoff := time.Now().Add(-maxAge)
+	for _, e := range entries {
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if info.ModTime().Before(cutoff) {
+			_ = os.RemoveAll(filepath.Join(offloadRoot, e.Name()))
+		}
+	}
 }
 
 func mustJSON(v interface{}) string {

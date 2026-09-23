@@ -4,7 +4,6 @@ package ui
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 
 	"fyne.io/fyne/v2"
@@ -194,10 +193,30 @@ func (sw *SettingsWindow) buildContent() {
 	instanceRows = append(instanceRows, refreshBtn)
 
 	saveBtn := widget.NewButton(i18n.T("settings.save"), func() {
-		httpPort, _ := strconv.Atoi(httpPortEntry.Text)
-		scanStart, _ := strconv.Atoi(scanStartEntry.Text)
-		scanEnd, _ := strconv.Atoi(scanEndEntry.Text)
-		interval, _ := strconv.Atoi(scanIntervalEntry.Text)
+		httpPort, err := config.ParsePortField(httpPortEntry.Text)
+		if err != nil {
+			statusLabel.SetText(i18n.T("settings.invalid_port"))
+			return
+		}
+		scanStart, err := config.ParsePortField(scanStartEntry.Text)
+		if err != nil {
+			statusLabel.SetText(i18n.T("settings.invalid_port"))
+			return
+		}
+		scanEnd, err := config.ParsePortField(scanEndEntry.Text)
+		if err != nil {
+			statusLabel.SetText(i18n.T("settings.invalid_port"))
+			return
+		}
+		if err := config.ValidateScanRange(scanStart, scanEnd); err != nil {
+			statusLabel.SetText(i18n.T("settings.scan_span_too_wide", config.MaxScanPortSpan))
+			return
+		}
+		interval, err := config.ParseScanIntervalField(scanIntervalEntry.Text)
+		if err != nil {
+			statusLabel.SetText(i18n.T("settings.invalid_interval"))
+			return
+		}
 
 		newCfg := config.Get()
 		newCfg.Enabled = enabledCheck.Checked
@@ -227,8 +246,25 @@ func (sw *SettingsWindow) buildContent() {
 		}
 		old := config.Get()
 		enteredDanger := newCfg.ListenLan && !newCfg.RequireAuth && !(old.ListenLan && !old.RequireAuth)
+		enteredRemote := len(old.RemoteUnreal) == 0 && len(newCfg.RemoteUnreal) > 0
 		apply := func() {
 			sw.applySavedConfig(newCfg, statusLabel)
+		}
+		confirmRemote := func() {
+			if enteredRemote {
+				dialog.ShowConfirm(
+					i18n.T("settings.remote_plain_warn_title"),
+					i18n.T("settings.remote_plain_warn"),
+					func(ok bool) {
+						if ok {
+							apply()
+						}
+					},
+					sw.win,
+				)
+				return
+			}
+			apply()
 		}
 		if enteredDanger {
 			dialog.ShowConfirm(
@@ -236,14 +272,14 @@ func (sw *SettingsWindow) buildContent() {
 				i18n.T("settings.lan_auth_warn"),
 				func(ok bool) {
 					if ok {
-						apply()
+						confirmRemote()
 					}
 				},
 				sw.win,
 			)
 			return
 		}
-		apply()
+		confirmRemote()
 	})
 	saveBtn.Importance = widget.HighImportance
 

@@ -11,6 +11,7 @@ package mcp
 import (
 	"encoding/json"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/bytepine/NexusDesktop/internal/log"
@@ -48,6 +49,9 @@ type Dispatcher struct {
 	version string
 	// onSessionReady 在 initialized 完成后调用（用于向 SSE 客户端推送 tools/list_changed）
 	onSessionReady func()
+
+	allowMu     sync.Mutex
+	alwaysAllow map[string]struct{} // 本 MCP 会话内「总是允许」的能力名
 }
 
 // NewDispatcher 创建分发器实例。version 为程序版本号。
@@ -218,7 +222,7 @@ func (d *Dispatcher) handleToolsCall(id interface{}, params map[string]interface
 	callInfo := proxy.ParseCall(toolName, args)
 	hub := d.manager.Hub
 	hub.WaitIfPaused()
-	if hub.ConfirmIfNeeded(callInfo) == proxy.DecisionDeny {
+	if d.confirmWrite(callInfo) == proxy.DecisionDeny {
 		return makeErrorWithData(id, errInternalError, "Write blocked by proxy gate (user denied).",
 			map[string]interface{}{"errorKind": "proxy_denied"}), nil
 	}
@@ -300,6 +304,35 @@ func (d *Dispatcher) handleToolsCall(id interface{}, params map[string]interface
 		return makeError(id, code, msg), nil
 	}
 	return makeError(id, errInternalError, "Invalid response from UE instance"), nil
+}
+
+// confirmWrite 执行写门控。「总是允许」只记在当前 Dispatcher（一条 MCP 会话）上。
+func (d *Dispatcher) confirmWrite(info proxy.CallInfo) proxy.GateDecision {
+	if d.allowsCapability(info.Capability) {
+		return proxy.DecisionAllow
+	}
+	decision := d.manager.Hub.ConfirmIfNeeded(info)
+	if decision == proxy.DecisionAlways {
+		d.rememberCapability(info.Capability)
+		return proxy.DecisionAllow
+	}
+	return decision
+}
+
+func (d *Dispatcher) allowsCapability(cap string) bool {
+	d.allowMu.Lock()
+	defer d.allowMu.Unlock()
+	_, ok := d.alwaysAllow[cap]
+	return ok
+}
+
+func (d *Dispatcher) rememberCapability(cap string) {
+	d.allowMu.Lock()
+	defer d.allowMu.Unlock()
+	if d.alwaysAllow == nil {
+		d.alwaysAllow = map[string]struct{}{}
+	}
+	d.alwaysAllow[cap] = struct{}{}
 }
 
 // handleListInstances 列出所有已发现的 UE 实例。

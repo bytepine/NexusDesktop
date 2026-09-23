@@ -10,12 +10,16 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/bytepine/NexusDesktop/internal/log"
 )
 
 const appDirName = "NexusDesktop"
@@ -59,6 +63,17 @@ const (
 	UpdateChannelAuto   = "auto"
 	UpdateChannelStable = "stable"
 	UpdateChannelPre    = "pre"
+
+	MinPort                = 1024
+	MaxPort                = 65535
+	MaxScanPortSpan        = 200 // 含端点：45000–45199 合法
+	MinScanIntervalSeconds = 1
+)
+
+var (
+	ErrInvalidPort     = errors.New("invalid port")
+	ErrInvalidInterval = errors.New("invalid scan interval")
+	ErrScanSpanTooWide = errors.New("scan port span too wide")
 )
 
 // DefaultConfig 返回内置默认配置。
@@ -180,18 +195,26 @@ func OnChange(fn func(Config)) {
 
 // sanitize 将不合法的字段修正为合理值。
 func sanitize(c *Config) {
-	if c.HTTPPort < 1024 || c.HTTPPort > 65535 {
+	if c.HTTPPort < MinPort || c.HTTPPort > MaxPort {
 		c.HTTPPort = 6700
 	}
-	if c.ScanPortStart < 1024 || c.ScanPortStart > 65535 {
+	if c.ScanPortStart < MinPort || c.ScanPortStart > MaxPort {
 		c.ScanPortStart = 45000
 	}
-	if c.ScanPortEnd < 1024 || c.ScanPortEnd > 65535 {
+	if c.ScanPortEnd < MinPort || c.ScanPortEnd > MaxPort {
 		c.ScanPortEnd = 45100
 	}
-	if c.ScanIntervalSeconds < 1 {
+	if c.ScanIntervalSeconds < MinScanIntervalSeconds {
 		c.ScanIntervalSeconds = 5
 	}
+	lo, hi := c.ScanPortStart, c.ScanPortEnd
+	if lo > hi {
+		lo, hi = hi, lo
+	}
+	if hi-lo+1 > MaxScanPortSpan {
+		log.Warnf("UE 扫描区间 [%d, %d] 超过 %d 个端口，已截断", lo, hi, MaxScanPortSpan)
+	}
+	c.ScanPortStart, c.ScanPortEnd = ClampScanPorts(c.ScanPortStart, c.ScanPortEnd)
 	switch c.WriteGate {
 	case "off", "destructive", "all":
 	default:
@@ -210,6 +233,63 @@ func sanitize(c *Config) {
 	default:
 		c.UpdateChannel = UpdateChannelAuto
 	}
+}
+
+func clampPort(p, fallback int) int {
+	if p < MinPort || p > MaxPort {
+		return fallback
+	}
+	return p
+}
+
+// ClampScanPorts 将起止端口收进合法范围，宽度超过 MaxScanPortSpan 时截断结束端口。
+func ClampScanPorts(start, end int) (int, int) {
+	start = clampPort(start, 45000)
+	end = clampPort(end, 45100)
+	if start > end {
+		start, end = end, start
+	}
+	if end-start+1 > MaxScanPortSpan {
+		end = start + MaxScanPortSpan - 1
+		if end > MaxPort {
+			end = MaxPort
+			start = end - MaxScanPortSpan + 1
+			if start < MinPort {
+				start = MinPort
+			}
+		}
+	}
+	return start, end
+}
+
+// ParsePortField 解析设置页端口；非数字或不在 1024–65535 返回 ErrInvalidPort。
+func ParsePortField(s string) (int, error) {
+	n, err := strconv.Atoi(strings.TrimSpace(s))
+	if err != nil || n < MinPort || n > MaxPort {
+		return 0, ErrInvalidPort
+	}
+	return n, nil
+}
+
+// ParseScanIntervalField 解析扫描间隔秒数；非数字或 < 1 返回 ErrInvalidInterval。
+func ParseScanIntervalField(s string) (int, error) {
+	n, err := strconv.Atoi(strings.TrimSpace(s))
+	if err != nil || n < MinScanIntervalSeconds {
+		return 0, ErrInvalidInterval
+	}
+	return n, nil
+}
+
+// ValidateScanRange 检查扫描宽度（含端点）不超过 MaxScanPortSpan。
+func ValidateScanRange(start, end int) error {
+	lo, hi := start, end
+	if lo > hi {
+		lo, hi = hi, lo
+	}
+	if hi-lo+1 > MaxScanPortSpan {
+		return ErrScanSpanTooWide
+	}
+	return nil
 }
 
 // IsPrerelease 判断版本串是否带 semver 预发布后缀（忽略 +build）。
