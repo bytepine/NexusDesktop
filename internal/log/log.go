@@ -92,8 +92,19 @@ func openLogFile() {
 		return
 	}
 	logFile = f
-	w := io.MultiWriter(os.Stdout, f)
-	logger = log.New(w, "", 0)
+	// 文件在前。发布包 -H=windowsgui 且无控制台时，os.Stdout.Write 返回
+	// "The handle is invalid"；MultiWriter 遇到错误即返回，stdout 放前面会让文件永远是 0 字节。
+	logger = log.New(io.MultiWriter(f, bestEffortWriter{os.Stdout}), "", 0)
+}
+
+// bestEffortWriter 吞掉写入错误，避免控制台失败阻断文件日志。
+type bestEffortWriter struct{ w io.Writer }
+
+func (b bestEffortWriter) Write(p []byte) (int, error) {
+	if b.w != nil {
+		_, _ = b.w.Write(p)
+	}
+	return len(p), nil
 }
 
 // LogDir 返回日志目录路径（Init 后才有值）。

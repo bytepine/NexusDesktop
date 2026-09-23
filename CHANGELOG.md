@@ -5,6 +5,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- fix(log): 发布包（无控制台）下 `logs/nexusdesktop.log` 不再因 stdout 句柄无效而保持为空
+
 ## [2.1.0] - 2026-09-21
 
 ### Added
