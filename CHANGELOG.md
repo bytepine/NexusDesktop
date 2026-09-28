@@ -5,6 +5,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- docs: 说明和界面里的生造词改为日常说法（鉴权→身份验证，写操作门控→写入前确认）
+
 ### Fixed
 
 - fix(log): 发布包（无控制台）下 `logs/nexusdesktop.log` 不再因 stdout 句柄无效而保持为空

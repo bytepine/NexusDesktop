@@ -2,7 +2,7 @@
 
 **Language / 语言**: 简体中文 · [English](README.en.md)
 
-独立的本地 MCP **中转程序**：无需 IDE 插件，双击运行后在系统托盘（macOS 菜单栏）常驻，发现本机 Unreal Engine 实例并经 WebSocket 转发工具调用。能力由 UE 侧 **NexusLink** 提供。
+独立的本地 MCP **中转程序**：无需 IDE 插件，双击运行后在系统托盘（macOS 菜单栏）常驻，发现本机 Unreal Engine 实例并经 WebSocket 转发工具调用。能力由 UE 里的 **NexusLink** 提供。
 
 四端端口与开关层数见 [NexusLink 使用指南](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.md)。本程序是 **两层** 开关中的客户端层（UE 启用 MCP + 托盘启用中转）。本机不要与 Rider / VSCode 代理同时开。
 
@@ -60,7 +60,7 @@
 
 ## 使用
 
-### 1. UE 前置
+### 1. 先准备好 UE
 
 安装并启用 NexusLink，勾选 **启用 MCP 服务器**（步骤见 [usage-guide §2](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.md)）。
 
@@ -78,18 +78,18 @@
 | 暂停 / 恢复 Agent 转发 | 远端调用在代理排队 |
 | ✓ 启用中转服务器 | 启停 MCP HTTP（默认 `:6700`；**新安装默认关**） |
 | MCP 客户端配置… | 选协议（Streamable HTTP / SSE）与客户端（Cursor / CodeBuddy）后复制一份 JSON；开 LAN 且多网卡时可选 IP；Bearer 仅本机 token |
-| 复制鉴权 Token | 只复制本机共享 token |
+| 复制身份验证 Token | 只复制本机共享 token |
 | 检查更新 | 启动与每 6 小时自动检查；点击下载 zip 并重启 |
 | 设置… | 打开设置窗口 |
 | 打开日志目录 | 打开日志 |
 | 开机自启 | 切换 |
 | 退出 | 退出程序 |
 
-唯一实例自动连接；多实例优先 `hostKind=Editor`（旧 UE 无该字段时回落 `netRole=Editor`）。
+唯一实例自动连接；多实例优先 `hostKind=Editor`（旧 UE 无该字段时改用 `netRole=Editor`）。
 
 ### 3. AI 客户端
 
-**Cursor**（`~/.cursor/mcp.json`）。Token 用托盘「复制鉴权 Token」或设置面板。可写多个：`Bearer <tok1>, <tok2>`。关闭「启用 MCP 鉴权」时可不带 `headers`。规则见 [usage-guide §1.1](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.md#11-鉴权)。
+**Cursor**（`~/.cursor/mcp.json`）。Token 用托盘「复制身份验证 Token」或设置面板。可写多个：`Bearer <tok1>, <tok2>`。关闭「启用 MCP 身份验证」时可不带 `headers`。规则见 [usage-guide §1.1](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.md#11-身份验证)。
 
 ```json
 {
@@ -114,15 +114,15 @@
 | MCP HTTP 端口 | 6700 | AI 客户端端口；保存后立即重启监听 |
 | UE 扫描起始 / 结束端口 | 45000 / 45100 | 发现范围 |
 | 扫描间隔（秒） | 5 | 定时发现 |
-| 写操作门控 | 破坏性操作 | 关闭 / 破坏性（删除、重命名、停 PIE）/ 全部写操作 |
+| 写入前确认 | 破坏性操作 | 关闭 / 破坏性（删除、重命名、停 PIE）/ 全部写操作 |
 | 更新渠道 | 跟随当前版本 | 正式仅正式版；预发布含 beta（可改成仅正式版或强制含预发布） |
 | 允许局域网接入 | 关 | MCP 绑 `0.0.0.0` |
-| 启用 MCP 鉴权 | 开 | 关闭后 AI 连本中转无需 Bearer（同旧版）；连 UE 仍看对方鉴权 |
-| 额外鉴权 Token | （空） | 点 + 逐条添加其他机器 token；本机 UE 自动读文件 |
+| 启用 MCP 身份验证 | 开 | 关闭后 AI 连本中转无需 Bearer（同旧版）；连 UE 仍看对方身份验证 |
+| 额外身份验证 Token | （空） | 点 + 逐条添加其他机器 token；本机 UE 自动读文件 |
 | 远程 UE | （空） | 每行 `host:端口 [token...]` |
 | 界面语言 | 跟随系统 | 简体中文 / English |
 
-跨机与鉴权见 [usage-guide §1](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.md)。
+跨机与身份验证见 [usage-guide §1](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.md)。
 
 ---
 
