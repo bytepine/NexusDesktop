@@ -5,6 +5,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [2.1.1] - 2026-10-08
+
 ### Changed
 
 - docs: 说明和界面里的生造词改为日常说法（鉴权→身份验证，写操作门控→写入前确认）
