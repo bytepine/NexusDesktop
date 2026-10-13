@@ -27,13 +27,13 @@ import (
 )
 
 const (
-	toolsCallTimeoutMs    = 120_000 * time.Millisecond
+	toolsCallTimeoutMs    = TOOLS_CALL_TIMEOUT_MS * time.Millisecond
 	wsLightRequestTimeout = toolsCallTimeoutMs
-	wsKeepaliveIdleMs     = 15_000 * time.Millisecond
-	wsKeepaliveBusyMs     = 5_000 * time.Millisecond
-	scanConcurrency       = 20
-	fullScanEveryNTicks   = 6
-	probeMaxBytes         = 65_536
+	wsKeepaliveIdleMs     = WS_KEEPALIVE_IDLE_MS * time.Millisecond
+	wsKeepaliveBusyMs     = WS_KEEPALIVE_BUSY_MS * time.Millisecond
+	scanConcurrency       = SCAN_CONCURRENCY
+	fullScanEveryNTicks   = FULL_SCAN_EVERY_N_TICKS
+	probeMaxBytes         = PROBE_MAX_BYTES
 	probeTimeout          = 1 * time.Second
 	wsHandshakeTimeout    = 3 * time.Second
 )
@@ -130,8 +130,8 @@ func NewManager() *Manager {
 		ConnectedHost:   LoopbackHost,
 		PreferredPort:   -1,
 		PreferredHost:   LoopbackHost,
-		ScanPortStart:   45000,
-		ScanPortEnd:     45100,
+		ScanPortStart:   SCAN_PORT_START,
+		ScanPortEnd:     SCAN_PORT_END,
 		pendingRequests: make(map[int64]chan WsRequestResult),
 		requestChain:    make(chan struct{}, 1),
 		proxyFeedback:   newProxyFeedbackBuffer(),
@@ -155,36 +155,33 @@ func ToolsCallTimeout() time.Duration { return toolsCallTimeoutMs }
 // ------------------------------------------------------------
 
 // MaintainConnection 定时维护入口：长连接存活时优先廉价心跳，
-// 每 fullScanEveryNTicks 轮或连接断开时才做全端口扫描。
+// 每 FULL_SCAN_EVERY_N_TICKS 轮或连接断开时才做全端口扫描。
 func (m *Manager) MaintainConnection() {
 	m.mu.Lock()
-	wsOpen := m.isWsOpen()
+	wsOpen := m.isWsOpen() && m.ConnectedPort > 0
 	port := m.ConnectedPort
 	connHost := m.ConnectedHost
 	pending := len(m.pendingRequests)
+	decision := decideMaintain(wsOpen, pending, m.fullScanCountdown)
+	if decision.Action == MaintainProbe {
+		m.fullScanCountdown = decision.NextCountdown
+	}
 	m.mu.Unlock()
 
-	if wsOpen && port > 0 {
-		if pending > 0 {
-			return // 有挂起请求 = 连接正被使用，跳过探测
+	switch decision.Action {
+	case MaintainSkip:
+		return
+	case MaintainProbe:
+		info := m.probeStatus(port, connHost, "")
+		if info != nil {
+			return // 心跳成功，省去全量扫描
 		}
 		m.mu.Lock()
-		if m.fullScanCountdown > 0 {
-			m.fullScanCountdown--
-			m.mu.Unlock()
-			info := m.probeStatus(port, connHost, "")
-			if info != nil {
-				return // 心跳成功，省去全量扫描
-			}
-			m.mu.Lock()
-			m.resetWsConnection(false)
-			m.mu.Unlock()
-		} else {
-			m.mu.Unlock()
-		}
+		m.resetWsConnection(false)
+		m.mu.Unlock()
 	}
 	m.mu.Lock()
-	m.fullScanCountdown = fullScanEveryNTicks
+	m.fullScanCountdown = FULL_SCAN_EVERY_N_TICKS
 	m.mu.Unlock()
 	m.DiscoverInstances()
 }
