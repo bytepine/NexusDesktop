@@ -5,6 +5,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- ui: 移除托盘“最近调用”提示，顶部始终显示 UE 连接状态；调用仍记录在调试日志中
+
 ### Fixed
 
 - fix(proxy): 会话策略对齐 PascalCase Capability、参数、`SnapshotAt` / `TtlSeconds`，恢复只读缓存、危险写入确认和运行时 TTL；读缓存、section 缓存及断线快照按 UE host/port 隔离，重连与切换实例不会污染其他实例缓存，写入只失效对应实例；非法显式 `targetPort` 在缓存与写入确认之前返回 `-32602`，不会回落到当前实例

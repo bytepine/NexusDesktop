@@ -184,20 +184,6 @@ func (tc *TrayController) rebuildMenu() {
 	} else {
 		statusLabel = i18n.T("tray.status_disconnected")
 	}
-	if snapAct := tc.manager.Hub.Activity(); snapAct != nil {
-		if snapAct.Paused {
-			statusLabel = i18n.T("tray.pause_agent")
-		} else if snapAct.Capability != "" {
-			label := snapAct.Capability
-			if snapAct.Identity != "" {
-				label += " " + snapAct.Identity
-			}
-			if len(label) > 40 {
-				label = label[:40] + "…"
-			}
-			statusLabel = i18n.T("tray.activity", label)
-		}
-	}
 
 	// 实例子菜单
 	instances := snap.Instances

@@ -72,7 +72,7 @@ Install and enable NexusLink, then check **Enable MCP Server** ([usage-guide §2
 
 | Tray item | Notes |
 |-----------|-------|
-| Status line | UE connection (project name / disconnected) |
+| Status line | Always shows the current UE connection (project name / disconnected) |
 | Select UE instance | Switch instance |
 | Scan UE instances | Manual port scan |
 | Pause / resume agent forwarding | Queue remote calls at the proxy |

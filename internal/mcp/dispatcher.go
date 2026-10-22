@@ -229,9 +229,6 @@ func (d *Dispatcher) handleToolsCall(id interface{}, params map[string]interface
 		return makeErrorWithData(id, errInternalError, "Write blocked by proxy gate (user denied).",
 			map[string]interface{}{"errorKind": "proxy_denied"}), nil
 	}
-	hub.BeginCall(callInfo)
-	defer hub.EndCall()
-
 	now := time.Now().UnixMilli()
 	callInfo = proxy.ParseCall(toolName, args, d.manager.CacheScope())
 	if hit := hub.LookupFresh(callInfo, now); hit != nil {

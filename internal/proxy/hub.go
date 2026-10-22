@@ -32,13 +32,6 @@ type CacheEntry struct {
 	TTLMS         int64
 }
 
-type ActivityState struct {
-	Capability string
-	Identity   string
-	AtMS       int64
-	Paused     bool
-}
-
 type LookupHit struct {
 	Result     interface{}
 	Kind       CacheKind
@@ -49,14 +42,12 @@ type GatePrompter func(CallInfo) GateDecision
 
 // Hub 进程级会话枢纽。
 type Hub struct {
-	mu         sync.Mutex
-	writeGate  WriteGateMode
-	paused     bool
-	pauseWait  *sync.Cond
-	cache      []*CacheEntry // LRU：尾部最新
-	activity   *ActivityState
-	prompter   GatePrompter
-	OnActivity func()
+	mu        sync.Mutex
+	writeGate WriteGateMode
+	paused    bool
+	pauseWait *sync.Cond
+	cache     []*CacheEntry // LRU：尾部最新
+	prompter  GatePrompter
 }
 
 func NewHub() *Hub {
@@ -103,31 +94,6 @@ func (h *Hub) SetPaused(v bool) {
 		h.pauseWait.Broadcast()
 	}
 	h.mu.Unlock()
-	h.emit()
-}
-
-func (h *Hub) Activity() *ActivityState {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if h.paused {
-		return &ActivityState{Paused: true, AtMS: time.Now().UnixMilli()}
-	}
-	if h.activity == nil {
-		return nil
-	}
-	cp := *h.activity
-	return &cp
-}
-
-func (h *Hub) BeginCall(info CallInfo) {
-	h.mu.Lock()
-	h.activity = &ActivityState{Capability: info.Capability, Identity: info.Identity, AtMS: time.Now().UnixMilli()}
-	h.mu.Unlock()
-	h.emit()
-}
-
-func (h *Hub) EndCall() {
-	h.emit()
 }
 
 func (h *Hub) WaitIfPaused() {
@@ -301,10 +267,4 @@ func pruneOffload(maxAge time.Duration) {
 func mustJSON(v interface{}) string {
 	b, _ := json.Marshal(v)
 	return string(b)
-}
-
-func (h *Hub) emit() {
-	if h.OnActivity != nil {
-		h.OnActivity()
-	}
 }

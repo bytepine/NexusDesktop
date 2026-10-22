@@ -77,7 +77,6 @@ func main() {
 	var tray *ui.TrayController
 	tray = ui.NewTrayController(fyneApp, mgr)
 	tray.AppVersion = appVersion
-	mgr.Hub.OnActivity = func() { tray.Refresh() }
 	mgr.Hub.SetPrompter(tray.PromptGate)
 
 	// macOS：在事件循环就绪（applicationDidFinishLaunching: 之后）再压一次 Accessory 策略，
