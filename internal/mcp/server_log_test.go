@@ -37,7 +37,11 @@ func TestReleaseDiagnostics(t *testing.T) {
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("diagnostics process: %v\n%s", err, out)
 	}
-	data, err := os.ReadFile(filepath.Join(dir, "logs", "nexusdesktop.log"))
+	files, err := filepath.Glob(filepath.Join(dir, "logs", "nexusdesktop_*.log"))
+	if err != nil || len(files) != 1 {
+		t.Fatalf("startup logs=%v err=%v", files, err)
+	}
+	data, err := os.ReadFile(files[0])
 	if err != nil {
 		t.Fatal(err)
 	}

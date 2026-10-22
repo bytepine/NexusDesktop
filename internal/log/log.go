@@ -23,7 +23,6 @@ import (
 
 const (
 	maxLogFileSize = 4 * 1024 * 1024 // 4MB 滚动阈值
-	logFileName    = "nexusdesktop.log"
 )
 
 // Level 由构建脚本通过 -X 注入，决定最低输出级别。
@@ -60,10 +59,12 @@ func parseLevel(s string) lvl {
 }
 
 var (
-	mu         sync.Mutex
-	logFile    *os.File
-	logger     *log.Logger
-	logDir     string
+	mu          sync.Mutex
+	logFile     *os.File
+	logger      *log.Logger
+	logDir      string
+	logPrefix   string
+	logPart     int
 	activeLevel lvl = lvlDebug
 )
 
@@ -77,13 +78,15 @@ func Init(appDataDir string) {
 	}
 	activeLevel = parseLevel(Level)
 	logDir = filepath.Join(appDataDir, "logs")
+	logPrefix = fmt.Sprintf("nexusdesktop_%s_pid%d", time.Now().Format("20060102_150405"), os.Getpid())
 	_ = os.MkdirAll(logDir, 0o755)
 	openLogFile()
 }
 
 func openLogFile() {
-	path := filepath.Join(logDir, logFileName)
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	logPart++
+	// 每次启动和滚动都新建文件，随机后缀避免时钟回拨或 PID 复用时覆盖旧日志。
+	f, err := os.CreateTemp(logDir, fmt.Sprintf("%s_%03d_*.log", logPrefix, logPart))
 	if err != nil {
 		// windowsgui 下 stdout 不可见：额外尝试写 init-error.txt 便于排查
 		_ = os.WriteFile(filepath.Join(logDir, "init-error.txt"),
@@ -95,6 +98,9 @@ func openLogFile() {
 	// 文件在前。发布包 -H=windowsgui 且无控制台时，os.Stdout.Write 返回
 	// "The handle is invalid"；MultiWriter 遇到错误即返回，stdout 放前面会让文件永远是 0 字节。
 	logger = log.New(io.MultiWriter(f, bestEffortWriter{os.Stdout}), "", 0)
+	if activeLevel <= lvlInfo {
+		logger.Printf("%s [INFO] 日志文件已创建 file=%q part=%d", timestamp(), f.Name(), logPart)
+	}
 }
 
 // bestEffortWriter 吞掉写入错误，避免控制台失败阻断文件日志。
@@ -146,9 +152,6 @@ func rotateLog() {
 		_ = logFile.Close()
 		logFile = nil
 	}
-	old := filepath.Join(logDir, logFileName)
-	bak := filepath.Join(logDir, fmt.Sprintf("nexusdesktop_%s.log", time.Now().Format("20060102_150405")))
-	_ = os.Rename(old, bak)
 	openLogFile()
 }
 

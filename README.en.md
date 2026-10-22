@@ -132,7 +132,7 @@ Cross-machine and auth: [usage-guide §1](https://github.com/bytepine/NexusLink/
 
 ## Logs and connection diagnostics
 
-Use the tray's log-directory menu to find `nexusdesktop.log` (`%APPDATA%\NexusDesktop\logs` on Windows). Release builds record startup version and process ID, server stop reasons, MCP session creation and initialization, missing or unknown sessions, session eviction, SSE connections, and tool-call start, completion, duration and error codes at INFO/WARN level. Routine scan and heartbeat details remain at DEBUG.
+Use the tray's log-directory menu to find `nexusdesktop_<startup>_pid<PID>_<part>_*.log` (`%APPDATA%\NexusDesktop\logs` on Windows). Each startup creates a new file; files from previous runs are preserved. A run continues in a new part after 4 MiB. Release builds record startup version and process ID, server stop reasons, MCP session creation and initialization, missing or unknown sessions, session eviction, SSE connections, and tool-call start, completion, duration and error codes at INFO/WARN level. Routine scan and heartbeat details remain at DEBUG.
 
 Match session events by the hashed `session` value and calls by the `request` number within one server run. `missing_session` means the header was absent; `unknown_session` means the ID is absent from the current server. `session_limit` and `waiting_for_initialize` identify eviction reasons. Logs omit Bearer tokens, complete session IDs, tool arguments and response bodies.
 
