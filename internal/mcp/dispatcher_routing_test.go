@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/bytepine/NexusDesktop/internal/proxy"
 	"github.com/bytepine/NexusDesktop/internal/unreal"
 	"github.com/gorilla/websocket"
 )
@@ -93,6 +94,26 @@ func TestDispatcherInstanceRouting(t *testing.T) {
 	}
 	if !manager.ConnectTo(b, true) || call("GetAssetBlueprint", 0) != "B" || bCalls.Load() != 1 {
 		t.Fatal("default route did not reuse only B cache")
+	}
+	prompts := 0
+	manager.Hub.SetPrompter(func(proxy.CallInfo) proxy.GateDecision {
+		prompts++
+		return proxy.DecisionAllow
+	})
+	for _, port := range []interface{}{-1, 0, 1023, 65536, 45000.5, "45000", nil, true} {
+		for _, capability := range []string{"GetAssetBlueprint", "ManageAssetBlueprint", "DeleteAsset"} {
+			request, _ := json.Marshal(map[string]interface{}{"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": map[string]interface{}{
+				"name": "CallCapability", "arguments": map[string]interface{}{"Capability": capability, "Arguments": map[string]interface{}{"AssetPath": "/synthetic/BP"}, "targetPort": port},
+			}})
+			response, err := dispatcher.Dispatch(string(request))
+			var rpc struct{ Error struct{ Code int } }
+			if err != nil || json.Unmarshal([]byte(response), &rpc) != nil || rpc.Error.Code != errInvalidParams {
+				t.Fatalf("invalid explicit target must be rejected: %s (%v)", response, err)
+			}
+		}
+	}
+	if aCalls.Load() != 1 || bCalls.Load() != 1 || prompts != 0 {
+		t.Fatal("invalid targets must not forward, serve cached reads, or prompt")
 	}
 	call("ManageAssetBlueprint", 0)
 	if call("GetAssetBlueprint", a) != "A" || aCalls.Load() != 1 {

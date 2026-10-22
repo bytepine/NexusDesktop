@@ -219,6 +219,9 @@ func (d *Dispatcher) handleToolsCall(id interface{}, params map[string]interface
 	}
 
 	args, _ := params["arguments"].(map[string]interface{})
+	if _, provided := args["targetPort"]; provided && proxy.ExplicitTargetPort(args) < 0 {
+		return makeError(id, errInvalidParams, "Invalid targetPort: expected an integer from 1024 to 65535."), nil
+	}
 	callInfo := proxy.ParseCall(toolName, args)
 	hub := d.manager.Hub
 	hub.WaitIfPaused()
