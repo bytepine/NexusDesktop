@@ -5,32 +5,32 @@ package proxy
 import "testing"
 
 func TestNeedsGate(t *testing.T) {
-	if !NeedsGate(GateDestructive, "delete_asset", nil) {
+	if !NeedsGate(GateDestructive, "DeleteAsset", nil) {
 		t.Fatal("delete")
 	}
-	if NeedsGate(GateOff, "delete_asset", nil) {
+	if NeedsGate(GateOff, "DeleteAsset", nil) {
 		t.Fatal("off")
 	}
-	if !IsDestructive("control_pie", map[string]interface{}{"action": "stop"}) {
+	if !IsDestructive("ControlPie", map[string]interface{}{"Action": "stop"}) {
 		t.Fatal("pie stop")
 	}
-	if IsDestructive("control_pie", map[string]interface{}{"action": "start"}) {
+	if IsDestructive("ControlPie", map[string]interface{}{"Action": "start"}) {
 		t.Fatal("pie start")
 	}
-	if !NeedsGate(GateAll, "create_asset_blueprint", nil) {
+	if !NeedsGate(GateAll, "CreateAssetBlueprint", nil) {
 		t.Fatal("all writes")
 	}
 }
 
 func TestSectionsAndCall(t *testing.T) {
-	if !SectionsCovered([]string{"all"}, []string{"graphOverview"}) {
+	if !SectionsCovered([]string{"All"}, []string{"graphOverview"}) {
 		t.Fatal("all covers")
 	}
-	info := ParseCall("call_capability", map[string]interface{}{
-		"capability": "get_asset_blueprint",
-		"arguments":  map[string]interface{}{"assetPath": "/Game/BP", "sections": []interface{}{"graphOverview"}},
+	info := ParseCall("CallCapability", map[string]interface{}{
+		"Capability": "GetAssetBlueprint",
+		"Arguments":  map[string]interface{}{"AssetPath": "/Game/BP", "Sections": []interface{}{"graphOverview"}},
 	})
-	if info.Capability != "get_asset_blueprint" || info.Identity != "/Game/BP" || info.IsWrite {
+	if info.Capability != "GetAssetBlueprint" || info.Identity != "/Game/BP" || info.IsWrite {
 		t.Fatalf("%+v", info)
 	}
 }
@@ -38,14 +38,14 @@ func TestSectionsAndCall(t *testing.T) {
 func TestHubCache(t *testing.T) {
 	h := NewHub()
 	now := int64(1_000_000)
-	info := ParseCall("call_capability", map[string]interface{}{
-		"capability": "get_asset_blueprint",
-		"arguments":  map[string]interface{}{"assetPath": "/Game/BP", "sections": []interface{}{"all"}},
+	info := ParseCall("CallCapability", map[string]interface{}{
+		"Capability": "GetAssetBlueprint",
+		"Arguments":  map[string]interface{}{"AssetPath": "/Game/BP", "Sections": []interface{}{"All"}},
 	})
 	payload := map[string]interface{}{
 		"content": []interface{}{map[string]interface{}{
 			"type": "text",
-			"text": `{"graph":1,"_ttl_seconds":30}`,
+			"text": `{"graph":1,"TtlSeconds":30}`,
 		}},
 		"isError": false,
 	}
@@ -54,9 +54,9 @@ func TestHubCache(t *testing.T) {
 	if hit == nil || hit.Kind != CacheHit {
 		t.Fatal("exact hit")
 	}
-	subset := ParseCall("call_capability", map[string]interface{}{
-		"capability": "get_asset_blueprint",
-		"arguments":  map[string]interface{}{"assetPath": "/Game/BP", "sections": []interface{}{"defaults"}},
+	subset := ParseCall("CallCapability", map[string]interface{}{
+		"Capability": "GetAssetBlueprint",
+		"Arguments":  map[string]interface{}{"AssetPath": "/Game/BP", "Sections": []interface{}{"Defaults"}},
 	})
 	sec := h.LookupFresh(subset, now+1000)
 	if sec == nil || sec.Kind != CacheSectionHit {

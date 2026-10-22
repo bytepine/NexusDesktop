@@ -230,17 +230,17 @@ func (d *Dispatcher) handleToolsCall(id interface{}, params map[string]interface
 	defer hub.EndCall()
 
 	now := time.Now().UnixMilli()
+	callInfo = proxy.ParseCall(toolName, args, d.manager.CacheScope())
 	if hit := hub.LookupFresh(callInfo, now); hit != nil {
 		return makeResult(id, proxy.WrapCached(hit.Result, hit.Kind, hit.SnapshotAt)), nil
 	}
 
 	// 解析可选 targetPort（一次性路由不改变长连接绑定）
 	forwardParams := cloneMap(params)
-	targetPort := -1
+	targetPort := proxy.ExplicitTargetPort(args)
 	targetHost := ""
 	if args != nil {
-		if tp, ok := args["targetPort"].(float64); ok && tp >= 1024 {
-			targetPort = int(tp)
+		if targetPort > 0 {
 			newArgs := cloneMap(args)
 			delete(newArgs, "targetPort")
 			if th, ok := args["targetHost"].(string); ok {
@@ -257,9 +257,11 @@ func (d *Dispatcher) handleToolsCall(id interface{}, params map[string]interface
 		outcome = d.manager.ForwardToolCallToPort(targetPort, forwardParams, targetHost)
 	} else {
 		_ = d.manager.EnsureLongConnection()
+		callInfo = proxy.ParseCall(toolName, args, d.manager.CacheScope())
 		outcome = d.manager.ForwardToolCall(forwardParams)
 		if outcome.Status == "disconnected" {
 			if d.manager.EnsureLongConnection() {
+				callInfo = proxy.ParseCall(toolName, args, d.manager.CacheScope())
 				outcome = d.manager.ForwardToolCall(forwardParams)
 			}
 		}
@@ -293,6 +295,10 @@ func (d *Dispatcher) handleToolsCall(id interface{}, params map[string]interface
 
 	resp := outcome.Response
 	if result, ok := resp["result"]; ok {
+		// 等待期间切换长连接时，响应不能污染另一个实例的缓存。
+		if targetPort <= 0 && callInfo.CacheScope != d.manager.CacheScope() {
+			return makeResult(id, result), nil
+		}
 		return makeResult(id, hub.Store(callInfo, result, now)), nil
 	}
 	if errObj, ok := resp["error"].(map[string]interface{}); ok {

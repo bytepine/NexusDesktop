@@ -16,7 +16,7 @@ func TestAlwaysAllowStaysInsideMCPSession(t *testing.T) {
 		prompts++
 		return proxy.DecisionAlways
 	})
-	info := proxy.ParseCall("delete_asset", map[string]interface{}{"assetPath": "/Game/A"})
+	info := proxy.ParseCall("DeleteAsset", map[string]interface{}{"AssetPath": "/Game/A"})
 
 	first := NewDispatcher(mgr, nil, "test")
 	if first.confirmWrite(info) != proxy.DecisionAllow {

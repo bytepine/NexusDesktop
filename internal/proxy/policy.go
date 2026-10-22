@@ -5,6 +5,8 @@ package proxy
 
 import (
 	"encoding/json"
+	"math"
+	"strconv"
 	"strings"
 )
 
@@ -42,7 +44,7 @@ const (
 	DegradedNote         = "UE editor unreachable (compile/restart?). Serving last snapshot. Do not loop list_unreal_instances."
 )
 
-var destructiveCaps = map[string]struct{}{"delete_asset": {}, "rename_asset": {}}
+var destructiveCaps = map[string]struct{}{"DeleteAsset": {}, "RenameAsset": {}}
 var stopPie = map[string]struct{}{"stop": {}, "end": {}, "quit": {}, "endplay": {}, "end_play": {}, "end-play": {}}
 
 type CallInfo struct {
@@ -53,6 +55,7 @@ type CallInfo struct {
 	Sections    []string
 	ExactKey    string
 	IdentityKey string
+	CacheScope  string
 	IsWrite     bool
 	IsBatch     bool
 }
@@ -67,10 +70,10 @@ func ParseWriteGate(raw string) WriteGateMode {
 }
 
 func IsWriteCapability(cap string) bool {
-	if cap == "" || cap == "submit_feedback" || cap == "search_capabilities" {
+	if cap == "" || cap == "SubmitFeedback" || cap == "SearchCapabilities" {
 		return false
 	}
-	if strings.HasPrefix(cap, "get_") || strings.HasPrefix(cap, "list_") || strings.HasPrefix(cap, "search_") {
+	if strings.HasPrefix(cap, "Get") || strings.HasPrefix(cap, "List") || strings.HasPrefix(cap, "Search") {
 		return false
 	}
 	return true
@@ -80,16 +83,16 @@ func IsDestructive(cap string, inner map[string]interface{}) bool {
 	if _, ok := destructiveCaps[cap]; ok {
 		return true
 	}
-	if cap == "control_pie" {
-		action, _ := inner["action"].(string)
+	if cap == "ControlPie" {
+		action, _ := inner["Action"].(string)
 		_, hit := stopPie[strings.ToLower(action)]
 		return hit
 	}
-	if strings.HasPrefix(cap, "manage_") {
-		ops, _ := inner["operations"].([]interface{})
+	if strings.HasPrefix(cap, "Manage") {
+		ops, _ := inner["Operations"].([]interface{})
 		for _, op := range ops {
 			m, _ := op.(map[string]interface{})
-			action, _ := m["action"].(string)
+			action, _ := m["Action"].(string)
 			a := strings.ToLower(action)
 			if strings.Contains(a, "delete") || strings.Contains(a, "remove") || a == "destroy" {
 				return true
@@ -111,31 +114,31 @@ func NeedsGate(mode WriteGateMode, cap string, inner map[string]interface{}) boo
 }
 
 func IsVolatileCap(cap string) bool {
-	return cap == "get_output_log" || cap == "capture_viewport" ||
-		strings.HasPrefix(cap, "list_runtime_") || strings.HasPrefix(cap, "get_runtime_")
+	return cap == "GetOutputLog" || cap == "CaptureViewport" ||
+		strings.HasPrefix(cap, "ListRuntime") || strings.HasPrefix(cap, "GetRuntime")
 }
 
 func IsDurableRead(cap string) bool {
 	if IsWriteCapability(cap) || IsVolatileCap(cap) {
 		return false
 	}
-	return strings.HasPrefix(cap, "search_") || strings.HasPrefix(cap, "get_asset_") ||
-		strings.HasPrefix(cap, "get_editor_") || cap == "get_gameplay_tags" ||
-		cap == "get_asset_refs" || cap == "get_asset_lua_binding"
+	return strings.HasPrefix(cap, "Search") || strings.HasPrefix(cap, "GetAsset") ||
+		strings.HasPrefix(cap, "GetEditor") || cap == "GetGameplayTags" ||
+		cap == "GetAssetRefs" || cap == "GetAssetLuaBinding"
 }
 
 func DefaultTtlMS(cap string) int64 {
 	if IsVolatileCap(cap) {
 		return DefaultVolatileTTLMS
 	}
-	if strings.HasPrefix(cap, "search_") {
+	if strings.HasPrefix(cap, "Search") {
 		return DefaultSearchTTLMS
 	}
 	return DefaultReadTTLMS
 }
 
 func extractIdentity(args map[string]interface{}) string {
-	for _, key := range []string{"assetPath", "actorName", "widgetName", "luaPath", "scriptPath"} {
+	for _, key := range []string{"AssetPath", "ActorName", "WidgetName", "LuaPath", "ScriptPath"} {
 		if v, ok := args[key].(string); ok && v != "" {
 			return v
 		}
@@ -144,7 +147,7 @@ func extractIdentity(args map[string]interface{}) string {
 }
 
 func extractSections(args map[string]interface{}) []string {
-	raw, ok := args["sections"].([]interface{})
+	raw, ok := args["Sections"].([]interface{})
 	if !ok {
 		return nil
 	}
@@ -163,7 +166,7 @@ func SectionsCovered(cached, requested []string) bool {
 		return false
 	}
 	for _, s := range cached {
-		if s == "all" {
+		if s == "All" {
 			return true
 		}
 	}
@@ -182,20 +185,47 @@ func SectionsCovered(cached, requested []string) bool {
 	return true
 }
 
-func ParseCall(toolName string, args map[string]interface{}) CallInfo {
+// ExplicitTargetPort 与三端路由统一：只接受合法整数端口。
+func ExplicitTargetPort(args map[string]interface{}) int {
+	port, ok := args["targetPort"].(float64)
+	if !ok || port < 1024 || port > 65535 || math.IsNaN(port) || math.Trunc(port) != port {
+		return -1
+	}
+	return int(port)
+}
+
+func ParseCall(toolName string, args map[string]interface{}, instanceScope ...string) CallInfo {
 	if args == nil {
 		args = map[string]interface{}{}
 	}
 	capability := toolName
-	inner := args
+	scope := ""
+	if len(instanceScope) > 0 {
+		scope = instanceScope[0]
+	}
+	if port := ExplicitTargetPort(args); port > 0 {
+		host, _ := args["targetHost"].(string)
+		host = strings.TrimSpace(host)
+		if host == "" || strings.EqualFold(host, "localhost") || host == "::1" {
+			host = "127.0.0.1"
+		}
+		scope = host + ":" + strconv.Itoa(port)
+	}
+	// 仅剥离顶层路由字段；嵌套能力参数仍参与缓存键。
+	inner := make(map[string]interface{}, len(args))
+	for k, v := range args {
+		if k != "targetPort" && k != "targetHost" {
+			inner[k] = v
+		}
+	}
 	isBatch := false
-	if toolName == "call_capability" {
-		if _, ok := args["calls"]; ok {
+	if toolName == "CallCapability" {
+		if _, ok := args["Calls"].([]interface{}); ok {
 			isBatch = true
-			capability = "call_capability.calls"
+			capability = "CallCapability.Calls"
 		} else {
-			capability, _ = args["capability"].(string)
-			if m, ok := args["arguments"].(map[string]interface{}); ok {
+			capability, _ = args["Capability"].(string)
+			if m, ok := args["Arguments"].(map[string]interface{}); ok {
 				inner = m
 			} else {
 				inner = map[string]interface{}{}
@@ -205,11 +235,12 @@ func ParseCall(toolName string, args map[string]interface{}) CallInfo {
 	ident := extractIdentity(inner)
 	sections := extractSections(inner)
 	raw, _ := json.Marshal(inner)
-	exact := toolName + "|" + capability + "|" + string(raw)
+	exact, _ := json.Marshal([]string{scope, toolName, capability, string(raw)})
+	identityKey, _ := json.Marshal([]string{scope, capability, ident})
 	return CallInfo{
 		ToolName: toolName, Capability: capability, InnerArgs: inner,
-		Identity: ident, Sections: sections, ExactKey: exact,
-		IdentityKey: capability + "|" + ident,
+		Identity: ident, Sections: sections, ExactKey: string(exact), CacheScope: scope,
+		IdentityKey: string(identityKey),
 		IsWrite:     isBatch || IsWriteCapability(capability),
 		IsBatch:     isBatch,
 	}
@@ -245,10 +276,10 @@ func ExtractTtlMS(result interface{}, cap string, nowMS int64) (ttlMS int64, sna
 	if src == nil {
 		return ttlMS, snapshotISO
 	}
-	if snap, ok := src["_snapshotAt"].(string); ok && snap != "" {
+	if snap, ok := src["SnapshotAt"].(string); ok && snap != "" {
 		snapshotISO = snap
 	}
-	switch v := src["_ttl_seconds"].(type) {
+	switch v := src["TtlSeconds"].(type) {
 	case float64:
 		if v > 0 {
 			ttlMS = int64(v * 1000)

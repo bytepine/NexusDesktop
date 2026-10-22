@@ -22,6 +22,7 @@ var offloadRoot = filepath.Join(os.TempDir(), "nexus-mcp-offload")
 type CacheEntry struct {
 	ExactKey      string
 	IdentityKey   string
+	CacheScope    string
 	Capability    string
 	Identity      string
 	Sections      []string
@@ -186,7 +187,7 @@ func (h *Hub) Store(info CallInfo, result interface{}, nowMS int64) interface{} 
 		}
 		h.mu.Lock()
 		h.cache = append(h.cache, &CacheEntry{
-			ExactKey: info.ExactKey, IdentityKey: info.IdentityKey,
+			ExactKey: info.ExactKey, IdentityKey: info.IdentityKey, CacheScope: info.CacheScope,
 			Capability: info.Capability, Identity: info.Identity, Sections: info.Sections,
 			Result: cloneJSON(stored), StoredAtMS: nowMS, SnapshotAtISO: snap, TTLMS: ttl,
 		})
@@ -196,7 +197,7 @@ func (h *Hub) Store(info CallInfo, result interface{}, nowMS int64) interface{} 
 		h.mu.Unlock()
 	}
 	if info.IsWrite && info.Identity != "" {
-		h.invalidateIdentity(info.Identity)
+		h.invalidateIdentity(info.Identity, info.CacheScope)
 	}
 	return stored
 }
@@ -242,12 +243,12 @@ func (h *Hub) usable(e *CacheEntry, nowMS int64, allowExpired bool, cap string) 
 	return IsDurableRead(cap)
 }
 
-func (h *Hub) invalidateIdentity(identity string) {
+func (h *Hub) invalidateIdentity(identity, cacheScope string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	out := h.cache[:0]
 	for _, e := range h.cache {
-		if e.Identity != identity {
+		if e.Identity != identity || e.CacheScope != cacheScope {
 			out = append(out, e)
 		}
 	}

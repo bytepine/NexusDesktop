@@ -11,7 +11,7 @@ func TestConfirmIfNeededDoesNotRememberAlways(t *testing.T) {
 		calls++
 		return DecisionAlways
 	})
-	info := CallInfo{Capability: "delete_asset"}
+	info := CallInfo{Capability: "DeleteAsset"}
 	if h.ConfirmIfNeeded(info) != DecisionAlways {
 		t.Fatal("first decision")
 	}

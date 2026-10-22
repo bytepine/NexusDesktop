@@ -85,7 +85,7 @@
 | 开机自启 | 切换 |
 | 退出 | 退出程序 |
 
-唯一实例自动连接；多实例优先 `hostKind=Editor`（旧 UE 无该字段时改用 `netRole=Editor`）。
+唯一实例自动连接；多实例优先 `hostKind=Editor`（旧 UE 无该字段时改用 `netRole=Editor`）。读缓存与断线快照按 UE host/port 隔离，切换实例不会复用另一实例的数据。
 
 ### 3. AI 客户端
 
@@ -127,6 +127,8 @@
 ---
 
 ## 本地构建
+
+提交前运行 `go vet ./...` 与 `go test ./...`，其中包含当前 PascalCase 契约和本地 HTTP/WebSocket 多实例转发回归。无 CGO/OpenGL 的环境可用 `go vet -tags ci ./...` 与 `go test -tags ci ./...` 做无窗口检查；这不代替原生 GUI 构建。
 
 - Go 1.25+
 - GCC / MinGW-w64（Windows）或 Xcode CLI（macOS）— Fyne 需要 CGO

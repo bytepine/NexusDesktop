@@ -85,7 +85,7 @@ Install and enable NexusLink, then check **Enable MCP Server** ([usage-guide §2
 | Launch on login | Toggle autostart |
 | Quit | Exit |
 
-A single instance auto-connects; multiple instances prefer `hostKind=Editor` (legacy UE without that field falls back to `netRole=Editor`).
+A single instance auto-connects; multiple instances prefer `hostKind=Editor` (legacy UE without that field falls back to `netRole=Editor`). Read caches and disconnected snapshots are isolated by UE host/port, so switching instances cannot reuse another instance's data.
 
 ### 3. AI client
 
@@ -127,6 +127,8 @@ Cross-machine and auth: [usage-guide §1](https://github.com/bytepine/NexusLink/
 ---
 
 ## Building locally
+
+Run `go vet ./...` and `go test ./...` before submitting. Tests cover the PascalCase contract and local HTTP/WebSocket multi-instance routing. Without CGO/OpenGL, use `go vet -tags ci ./...` and `go test -tags ci ./...` for headless checks; these do not replace a native GUI build.
 
 - Go 1.25+
 - GCC / MinGW-w64 (Windows) or Xcode CLI (macOS) — Fyne needs CGO

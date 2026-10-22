@@ -5,6 +5,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- fix(proxy): 会话策略对齐 PascalCase Capability、参数、`SnapshotAt` / `TtlSeconds`，恢复只读缓存、危险写入确认和运行时 TTL；读缓存、section 缓存及断线快照按 UE host/port 隔离，重连与切换实例不会污染其他实例缓存，写入只失效对应实例
+- fix(test): 策略测试改用当前协议，补充跨 host/port、TTL 与本地 HTTP/WebSocket 转发回归，纳入已有 CI 全包测试
+
 ## [2.1.1] - 2026-10-08
 
 ### Changed

@@ -28,7 +28,7 @@ func TestOffloadWritesRestrictedFile(t *testing.T) {
 	offloadRoot = dir
 	h := NewHub()
 	big := strings.Repeat("x", OffloadChars+1)
-	info := ParseCall("get_asset_details", map[string]interface{}{"assetPath": "/Game/A"})
+	info := ParseCall("GetAssetBlueprint", map[string]interface{}{"AssetPath": "/Game/A"})
 	result := map[string]interface{}{
 		"content": []interface{}{map[string]interface{}{"type": "text", "text": big}},
 	}

@@ -65,6 +65,9 @@ type Manager struct {
 	// manuallyDisconnected 表示用户主动断开，抑制自动重连直到用户手动连接。
 	manuallyDisconnected bool
 
+	// 最近成功连接的实例；断线时保留快照作用域。
+	lastConnectedInstanceKey string
+
 	ScanPortStart int
 	ScanPortEnd   int
 
@@ -121,6 +124,13 @@ func (m *Manager) Snapshot() StateSnapshot {
 		ConnectedHost: m.ConnectedHost,
 		WsOpen:        m.isWsOpen(),
 	}
+}
+
+// CacheScope 断线保留最近成功实例，快照只供同一 host/port 使用。
+func (m *Manager) CacheScope() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.lastConnectedInstanceKey
 }
 
 // NewManager 创建并返回一个 Manager，使用默认扫描范围。
@@ -500,6 +510,7 @@ func (m *Manager) ConnectTo(port int, setPreferred bool, hostOpt ...string) bool
 	m.ws = conn
 	m.ConnectedPort = port
 	m.ConnectedHost = targetHost
+	m.lastConnectedInstanceKey = InstanceKey(targetHost, port)
 	m.connectedToolsListMode = info.ToolsListMode
 	m.mu.Unlock()
 
