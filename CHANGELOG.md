@@ -11,8 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
-- fix(proxy): 会话策略对齐 PascalCase Capability、参数、`SnapshotAt` / `TtlSeconds`，恢复只读缓存、危险写入确认和运行时 TTL；读缓存、section 缓存及断线快照按 UE host/port 隔离，重连与切换实例不会污染其他实例缓存，写入只失效对应实例；非法显式 `targetPort` 在缓存与写入确认之前返回 `-32602`，不会回落到当前实例
-- fix(test): 策略测试改用当前协议，补充跨 host/port、TTL、本地 HTTP/WebSocket 转发与非法目标读写拒绝回归，纳入已有 CI 全包测试
+- fix(proxy): 会话策略兼容已发布 2.x 的 snake_case 名称 / camelCase 参数及当前 PascalCase，业务请求原样转发；同时识别 `_snapshotAt` / `_ttl_seconds` 与 `SnapshotAt` / `TtlSeconds`，恢复只读缓存、危险写入确认和运行时 TTL；读缓存、section 缓存及断线快照按 UE host/port 隔离，重连与切换实例不会污染其他实例缓存，单次写入失效对应资产，批量调用（含部分失败）清理目标实例缓存，失败读取不进入缓存；非法显式 `targetPort` 在缓存与写入确认之前返回 `-32602`，不会回落到当前实例
+- fix(proxy): 大响应临时文件使用独立于旧 2.x 的根目录，按会话枢纽分目录保存并使用唯一文件名；仅清理超过 1 小时的文件，新旧进程混用不会由旧版清理掉新版结果；落盘失败返回原响应，落盘后保留原 TTL
+- fix(test): 补充 2.x 新旧协议、跨 host/port、TTL、本地 HTTP/WebSocket 转发、非法目标读写拒绝、批量失效、失败读取和新旧临时目录隔离回归，纳入已有 CI 全包测试
 
 ## [2.1.1] - 2026-10-08
 

@@ -3,21 +3,20 @@
 package proxy
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strconv"
 	"sync"
 	"time"
 )
 
 const (
-	offloadMaxAge   = time.Hour
-	offloadDirPerm  = 0o700
-	offloadFilePerm = 0o600
+	offloadMaxAge  = time.Hour
+	offloadDirPerm = 0o700
 )
 
-var offloadRoot = filepath.Join(os.TempDir(), "nexus-mcp-offload")
+var offloadRoot = filepath.Join(os.TempDir(), "nexus-mcp-offload-v2")
 
 type CacheEntry struct {
 	ExactKey      string
@@ -42,20 +41,22 @@ type GatePrompter func(CallInfo) GateDecision
 
 // Hub 进程级会话枢纽。
 type Hub struct {
-	mu        sync.Mutex
-	writeGate WriteGateMode
-	paused    bool
-	pauseWait *sync.Cond
-	cache     []*CacheEntry // LRU：尾部最新
-	prompter  GatePrompter
+	mu         sync.Mutex
+	writeGate  WriteGateMode
+	paused     bool
+	pauseWait  *sync.Cond
+	cache      []*CacheEntry // LRU：尾部最新
+	prompter   GatePrompter
+	offloadDir string
 }
 
 func NewHub() *Hub {
 	h := &Hub{
-		writeGate: GateDestructive,
+		writeGate:  GateDestructive,
+		offloadDir: filepath.Join(offloadRoot, rand.Text()),
 	}
 	h.pauseWait = sync.NewCond(&h.mu)
-	purgeOffload()
+	pruneOffload(offloadMaxAge)
 	return h
 }
 
@@ -143,11 +144,20 @@ func (h *Hub) LookupDegraded(info CallInfo, nowMS int64) *LookupHit {
 
 func (h *Hub) Store(info CallInfo, result interface{}, nowMS int64) interface{} {
 	stored := cloneJSON(result)
+	// 批量操作可能部分成功，先失效目标实例，避免保留旧快照。
+	if info.IsBatch {
+		h.invalidateIdentity("", info.CacheScope)
+	} else if info.IsWrite && info.Identity != "" {
+		h.invalidateIdentity(info.Identity, info.CacheScope)
+	}
+	if rec, ok := stored.(map[string]interface{}); ok && rec["isError"] == true {
+		return stored
+	}
+	ttl, snap := ExtractTtlMS(stored, info.Capability, nowMS)
 	if ContentTextLen(stored) > OffloadChars {
 		stored = h.offload(stored)
 	}
 	if !info.IsWrite && !info.IsBatch && info.Capability != "" {
-		ttl, snap := ExtractTtlMS(stored, info.Capability, nowMS)
 		if snap == "" {
 			snap = time.UnixMilli(nowMS).UTC().Format(time.RFC3339)
 		}
@@ -161,9 +171,6 @@ func (h *Hub) Store(info CallInfo, result interface{}, nowMS int64) interface{} 
 			h.cache = h.cache[1:]
 		}
 		h.mu.Unlock()
-	}
-	if info.IsWrite && info.Identity != "" {
-		h.invalidateIdentity(info.Identity, info.CacheScope)
 	}
 	return stored
 }
@@ -214,7 +221,7 @@ func (h *Hub) invalidateIdentity(identity, cacheScope string) {
 	defer h.mu.Unlock()
 	out := h.cache[:0]
 	for _, e := range h.cache {
-		if e.Identity != identity || e.CacheScope != cacheScope {
+		if e.CacheScope != cacheScope || (identity != "" && e.Identity != identity) {
 			out = append(out, e)
 		}
 	}
@@ -223,10 +230,24 @@ func (h *Hub) invalidateIdentity(identity, cacheScope string) {
 
 func (h *Hub) offload(result interface{}) interface{} {
 	pruneOffload(offloadMaxAge)
-	_ = os.MkdirAll(offloadRoot, offloadDirPerm)
-	file := filepath.Join(offloadRoot, "offload-"+strconv.FormatInt(time.Now().UnixMilli(), 10)+".json")
-	b, _ := json.Marshal(result)
-	_ = os.WriteFile(file, b, offloadFilePerm)
+	if err := os.MkdirAll(h.offloadDir, offloadDirPerm); err != nil {
+		return result
+	}
+	b, err := json.Marshal(result)
+	if err != nil {
+		return result
+	}
+	f, err := os.CreateTemp(h.offloadDir, "offload-*.json")
+	if err != nil {
+		return result
+	}
+	file := f.Name()
+	_, writeErr := f.Write(b)
+	closeErr := f.Close()
+	if writeErr != nil || closeErr != nil {
+		_ = os.Remove(file)
+		return result
+	}
 	summary := map[string]interface{}{
 		"content": []interface{}{map[string]interface{}{
 			"type": "text",
@@ -237,29 +258,28 @@ func (h *Hub) offload(result interface{}) interface{} {
 	return InjectProxyMeta(summary, map[string]interface{}{"offloaded": true, "path": file, "bytes": len(b)})
 }
 
-func purgeOffload() {
-	entries, err := os.ReadDir(offloadRoot)
-	if err != nil {
-		return
-	}
-	for _, e := range entries {
-		_ = os.RemoveAll(filepath.Join(offloadRoot, e.Name()))
-	}
+func pruneOffload(maxAge time.Duration) {
+	pruneOffloadDir(offloadRoot, time.Now().Add(-maxAge))
 }
 
-func pruneOffload(maxAge time.Duration) {
-	entries, err := os.ReadDir(offloadRoot)
+func pruneOffloadDir(dir string, cutoff time.Time) {
+	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return
 	}
-	cutoff := time.Now().Add(-maxAge)
 	for _, e := range entries {
+		path := filepath.Join(dir, e.Name())
+		if e.IsDir() {
+			pruneOffloadDir(path, cutoff)
+			_ = os.Remove(path) // 仅删除空目录，保留其他实例的新文件。
+			continue
+		}
 		info, err := e.Info()
 		if err != nil {
 			continue
 		}
 		if info.ModTime().Before(cutoff) {
-			_ = os.RemoveAll(filepath.Join(offloadRoot, e.Name()))
+			_ = os.Remove(path)
 		}
 	}
 }

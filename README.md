@@ -87,6 +87,10 @@
 
 唯一实例自动连接；多实例优先 `hostKind=Editor`（旧 UE 无该字段时改用 `netRole=Editor`）。读缓存与断线快照按 UE host/port 隔离，切换实例不会复用另一实例的数据。显式 `targetPort` 须为 1024–65535 的整数；非法值返回 `-32602`，不会转发到当前实例或返回缓存。
 
+批量调用（含部分失败）会清理目标实例的读缓存，失败读取不会进入缓存。大响应临时文件相互隔离，仅清理超过 1 小时的文件。
+
+兼容已发布 2.x 的工具调用格式和当前格式，请求原样转发。新版临时目录与旧 2.x 分开，避免旧进程清理新版结果。
+
 ### 3. AI 客户端
 
 **Cursor**（`~/.cursor/mcp.json`）。Token 用托盘「复制身份验证 Token」或设置面板。可写多个：`Bearer <tok1>, <tok2>`。关闭「启用 MCP 身份验证」时可不带 `headers`。规则见 [usage-guide §1.1](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.md#11-身份验证)。

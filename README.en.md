@@ -87,6 +87,10 @@ Install and enable NexusLink, then check **Enable MCP Server** ([usage-guide §2
 
 A single instance auto-connects; multiple instances prefer `hostKind=Editor` (legacy UE without that field falls back to `netRole=Editor`). Read caches and disconnected snapshots are isolated by UE host/port, so switching instances cannot reuse another instance's data.
 
+Batch calls, including partial failures, invalidate the target instance's read cache. Failed reads are never cached. Large-response files are isolated between hubs; only files older than one hour are cleaned up.
+
+Released 2.x and current tool-call formats are supported without rewriting requests. New payloads use a separate temporary root so older 2.x processes cannot delete them during startup cleanup.
+
 ### 3. AI client
 
 **Cursor** (`~/.cursor/mcp.json`). Copy the token from the tray **Copy auth token** or Settings. Multiple tokens: `Bearer <tok1>, <tok2>`. If **Require MCP auth** is off, omit `headers`. See [usage-guide §1.1](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.md#11-身份验证).

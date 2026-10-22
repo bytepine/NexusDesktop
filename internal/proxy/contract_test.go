@@ -2,7 +2,65 @@
 
 package proxy
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "nexus-proxy-test-")
+	if err != nil {
+		panic(err)
+	}
+	offloadRoot = filepath.Join(dir, "nexus-mcp-offload-v2")
+	code := m.Run()
+	_ = os.RemoveAll(dir)
+	os.Exit(code)
+}
+
+func TestLegacyV2PolicyCompatibility(t *testing.T) {
+	args := map[string]interface{}{"capability": "get_asset_blueprint", "arguments": map[string]interface{}{"assetPath": "/synthetic/BP", "sections": []interface{}{"all"}}, "targetPort": float64(45000)}
+	before := mustJSON(args)
+	read := ParseCall("call_capability", args)
+	if read.IsWrite || read.Identity != "/synthetic/BP" || NeedsGate(GateAll, read.Capability, read.InnerArgs) {
+		t.Fatal("legacy read classification failed")
+	}
+	if IsWriteCapability("get_asset_blueprint") || DefaultTtlMS("get_output_log") != 8000 || DefaultTtlMS("search_asset") != 60000 || !IsDurableRead("get_asset_blueprint") || IsDurableRead("list_runtime_actors") {
+		t.Fatal("legacy policy classification failed")
+	}
+	if !NeedsGate(GateDestructive, "delete_asset", nil) || !NeedsGate(GateDestructive, "rename_asset", nil) ||
+		!NeedsGate(GateDestructive, "control_pie", map[string]interface{}{"action": "stop", "Action": "start"}) ||
+		!NeedsGate(GateDestructive, "manage_asset_blueprint", map[string]interface{}{"operations": []interface{}{map[string]interface{}{"action": "remove_node"}}}) {
+		t.Fatal("legacy dangerous writes must prompt")
+	}
+	conflicting := ParseCall("call_capability", map[string]interface{}{"capability": "delete_asset", "Capability": "GetAssetBlueprint"})
+	if !NeedsGate(GateDestructive, conflicting.Capability, conflicting.InnerArgs) {
+		t.Fatal("legacy wire fields must take precedence")
+	}
+	payload := map[string]interface{}{"content": []interface{}{map[string]interface{}{"type": "text", "text": `{"_ttl_seconds":1,"_snapshotAt":"2026-10-22T00:00:00Z"}`}}}
+	h := NewHub()
+	h.Store(read, payload, 1000)
+	if ttl, snap := ExtractTtlMS(payload, read.Capability, 1000); ttl != 1000 || snap != "2026-10-22T00:00:00Z" {
+		t.Fatal("legacy TTL metadata lost")
+	}
+	subset := ParseCall("call_capability", map[string]interface{}{"capability": "get_asset_blueprint", "arguments": map[string]interface{}{"assetPath": "/synthetic/BP", "sections": []interface{}{"defaults"}}, "targetPort": float64(45000)})
+	if hit := h.LookupFresh(subset, 1100); hit == nil || hit.Kind != CacheSectionHit {
+		t.Fatal("legacy all sections must cover subsets")
+	}
+	if h.LookupFresh(read, 32000) != nil || h.LookupDegraded(read, 100000) == nil {
+		t.Fatal("legacy TTL or degraded snapshot failed")
+	}
+	modern := ParseCall("CallCapability", map[string]interface{}{"Capability": "GetAssetBlueprint", "Arguments": map[string]interface{}{"AssetPath": "/synthetic/BP"}, "targetPort": float64(45000)})
+	if h.LookupFresh(modern, 1100) != nil {
+		t.Fatal("different wire formats must not share cached response shapes")
+	}
+	batch := ParseCall("call_capability", map[string]interface{}{"calls": []interface{}{map[string]interface{}{"capability": "manage_asset_blueprint", "arguments": map[string]interface{}{"assetPath": "/synthetic/BP"}}}, "targetPort": float64(45000)})
+	h.Store(batch, map[string]interface{}{}, 1200)
+	if !batch.IsBatch || h.LookupFresh(read, 1300) != nil || mustJSON(args) != before {
+		t.Fatal("legacy batch invalidation or immutable arguments failed")
+	}
+}
 
 func TestCanonicalContractAndInstanceCache(t *testing.T) {
 	query := func(port float64, host string, sections ...interface{}) map[string]interface{} {
@@ -60,5 +118,29 @@ func TestCanonicalContractAndInstanceCache(t *testing.T) {
 	}
 	if !ParseCall("CallCapability", map[string]interface{}{"Calls": []interface{}{}}).IsBatch {
 		t.Fatal("canonical batch not recognized")
+	}
+}
+
+func TestBatchInvalidationAndFailedReads(t *testing.T) {
+	h := NewHub()
+	a := ParseCall("GetAssetBlueprint", map[string]interface{}{"AssetPath": "/synthetic/BP", "targetPort": float64(45000)})
+	b := ParseCall("GetAssetBlueprint", map[string]interface{}{"AssetPath": "/synthetic/BP", "targetPort": float64(45001)})
+	success := map[string]interface{}{"content": []interface{}{map[string]interface{}{"type": "text", "text": `{"value":"old"}`}}}
+	failure := map[string]interface{}{"isError": true, "content": []interface{}{map[string]interface{}{"type": "text", "text": "temporary failure"}}}
+	for _, result := range []interface{}{success, failure} {
+		h.Store(a, success, 1000)
+		h.Store(b, success, 1000)
+		batch := ParseCall("CallCapability", map[string]interface{}{
+			"Calls":      []interface{}{map[string]interface{}{"Capability": "ManageAssetBlueprint", "Arguments": map[string]interface{}{"AssetPath": "/synthetic/BP"}}},
+			"targetPort": float64(45000),
+		})
+		h.Store(batch, result, 1100)
+		if h.LookupFresh(a, 1200) != nil || h.LookupDegraded(a, 100000) != nil || h.LookupFresh(b, 1200) == nil {
+			t.Fatal("batch must invalidate only its target, including partial failure")
+		}
+	}
+	h.Store(a, failure, 1300)
+	if h.LookupFresh(a, 1400) != nil || h.LookupDegraded(a, 100000) != nil {
+		t.Fatal("failed read must not become a fresh or degraded snapshot")
 	}
 }

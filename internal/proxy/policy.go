@@ -44,7 +44,7 @@ const (
 	DegradedNote         = "UE editor unreachable (compile/restart?). Serving last snapshot. Do not loop list_unreal_instances."
 )
 
-var destructiveCaps = map[string]struct{}{"DeleteAsset": {}, "RenameAsset": {}}
+var destructiveCaps = map[string]struct{}{"deleteasset": {}, "renameasset": {}}
 var stopPie = map[string]struct{}{"stop": {}, "end": {}, "quit": {}, "endplay": {}, "end_play": {}, "end-play": {}}
 
 type CallInfo struct {
@@ -69,30 +69,50 @@ func ParseWriteGate(raw string) WriteGateMode {
 	}
 }
 
+// 仅供本地策略判断；不修改转发给对应版本的原始请求。
+func policyName(name string) string {
+	return strings.ToLower(strings.ReplaceAll(name, "_", ""))
+}
+
+func policyField(args map[string]interface{}, key string, legacy bool) interface{} {
+	camel := strings.ToLower(key[:1]) + key[1:]
+	primary, fallback := key, camel
+	if legacy {
+		primary, fallback = camel, key
+	}
+	if value, ok := args[primary]; ok {
+		return value
+	}
+	return args[fallback]
+}
+
 func IsWriteCapability(cap string) bool {
-	if cap == "" || cap == "SubmitFeedback" || cap == "SearchCapabilities" {
+	cap = policyName(cap)
+	if cap == "" || cap == "submitfeedback" || cap == "searchcapabilities" {
 		return false
 	}
-	if strings.HasPrefix(cap, "Get") || strings.HasPrefix(cap, "List") || strings.HasPrefix(cap, "Search") {
+	if strings.HasPrefix(cap, "get") || strings.HasPrefix(cap, "list") || strings.HasPrefix(cap, "search") {
 		return false
 	}
 	return true
 }
 
 func IsDestructive(cap string, inner map[string]interface{}) bool {
+	legacy := strings.Contains(cap, "_")
+	cap = policyName(cap)
 	if _, ok := destructiveCaps[cap]; ok {
 		return true
 	}
-	if cap == "ControlPie" {
-		action, _ := inner["Action"].(string)
+	if cap == "controlpie" {
+		action, _ := policyField(inner, "Action", legacy).(string)
 		_, hit := stopPie[strings.ToLower(action)]
 		return hit
 	}
-	if strings.HasPrefix(cap, "Manage") {
-		ops, _ := inner["Operations"].([]interface{})
+	if strings.HasPrefix(cap, "manage") {
+		ops, _ := policyField(inner, "Operations", legacy).([]interface{})
 		for _, op := range ops {
 			m, _ := op.(map[string]interface{})
-			action, _ := m["Action"].(string)
+			action, _ := policyField(m, "Action", legacy).(string)
 			a := strings.ToLower(action)
 			if strings.Contains(a, "delete") || strings.Contains(a, "remove") || a == "destroy" {
 				return true
@@ -114,40 +134,42 @@ func NeedsGate(mode WriteGateMode, cap string, inner map[string]interface{}) boo
 }
 
 func IsVolatileCap(cap string) bool {
-	return cap == "GetOutputLog" || cap == "CaptureViewport" ||
-		strings.HasPrefix(cap, "ListRuntime") || strings.HasPrefix(cap, "GetRuntime")
+	cap = policyName(cap)
+	return cap == "getoutputlog" || cap == "captureviewport" ||
+		strings.HasPrefix(cap, "listruntime") || strings.HasPrefix(cap, "getruntime")
 }
 
 func IsDurableRead(cap string) bool {
 	if IsWriteCapability(cap) || IsVolatileCap(cap) {
 		return false
 	}
-	return strings.HasPrefix(cap, "Search") || strings.HasPrefix(cap, "GetAsset") ||
-		strings.HasPrefix(cap, "GetEditor") || cap == "GetGameplayTags" ||
-		cap == "GetAssetRefs" || cap == "GetAssetLuaBinding"
+	cap = policyName(cap)
+	return strings.HasPrefix(cap, "search") || strings.HasPrefix(cap, "getasset") ||
+		strings.HasPrefix(cap, "geteditor") || cap == "getgameplaytags" ||
+		cap == "getassetrefs" || cap == "getassetluabinding"
 }
 
 func DefaultTtlMS(cap string) int64 {
 	if IsVolatileCap(cap) {
 		return DefaultVolatileTTLMS
 	}
-	if strings.HasPrefix(cap, "Search") {
+	if strings.HasPrefix(policyName(cap), "search") {
 		return DefaultSearchTTLMS
 	}
 	return DefaultReadTTLMS
 }
 
-func extractIdentity(args map[string]interface{}) string {
+func extractIdentity(args map[string]interface{}, legacy bool) string {
 	for _, key := range []string{"AssetPath", "ActorName", "WidgetName", "LuaPath", "ScriptPath"} {
-		if v, ok := args[key].(string); ok && v != "" {
+		if v, ok := policyField(args, key, legacy).(string); ok && v != "" {
 			return v
 		}
 	}
 	return ""
 }
 
-func extractSections(args map[string]interface{}) []string {
-	raw, ok := args["Sections"].([]interface{})
+func extractSections(args map[string]interface{}, legacy bool) []string {
+	raw, ok := policyField(args, "Sections", legacy).([]interface{})
 	if !ok {
 		return nil
 	}
@@ -166,7 +188,7 @@ func SectionsCovered(cached, requested []string) bool {
 		return false
 	}
 	for _, s := range cached {
-		if s == "All" {
+		if strings.EqualFold(s, "All") {
 			return true
 		}
 	}
@@ -219,21 +241,23 @@ func ParseCall(toolName string, args map[string]interface{}, instanceScope ...st
 		}
 	}
 	isBatch := false
-	if toolName == "CallCapability" {
-		if _, ok := args["Calls"].([]interface{}); ok {
+	if policyName(toolName) == "callcapability" {
+		legacy := strings.Contains(toolName, "_")
+		if _, ok := policyField(args, "Calls", legacy).([]interface{}); ok {
 			isBatch = true
-			capability = "CallCapability.Calls"
+			capability = toolName + ".Calls"
 		} else {
-			capability, _ = args["Capability"].(string)
-			if m, ok := args["Arguments"].(map[string]interface{}); ok {
+			capability, _ = policyField(args, "Capability", legacy).(string)
+			if m, ok := policyField(args, "Arguments", legacy).(map[string]interface{}); ok {
 				inner = m
 			} else {
 				inner = map[string]interface{}{}
 			}
 		}
 	}
-	ident := extractIdentity(inner)
-	sections := extractSections(inner)
+	legacy := strings.Contains(capability, "_")
+	ident := extractIdentity(inner, legacy)
+	sections := extractSections(inner, legacy)
 	raw, _ := json.Marshal(inner)
 	exact, _ := json.Marshal([]string{scope, toolName, capability, string(raw)})
 	identityKey, _ := json.Marshal([]string{scope, capability, ident})
@@ -276,10 +300,18 @@ func ExtractTtlMS(result interface{}, cap string, nowMS int64) (ttlMS int64, sna
 	if src == nil {
 		return ttlMS, snapshotISO
 	}
-	if snap, ok := src["SnapshotAt"].(string); ok && snap != "" {
+	snapshot, ok := src["SnapshotAt"]
+	if !ok {
+		snapshot = src["_snapshotAt"]
+	}
+	if snap, ok := snapshot.(string); ok && snap != "" {
 		snapshotISO = snap
 	}
-	switch v := src["TtlSeconds"].(type) {
+	ttlValue, ok := src["TtlSeconds"]
+	if !ok {
+		ttlValue = src["_ttl_seconds"]
+	}
+	switch v := ttlValue.(type) {
 	case float64:
 		if v > 0 {
 			ttlMS = int64(v * 1000)
