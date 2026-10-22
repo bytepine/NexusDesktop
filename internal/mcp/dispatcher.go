@@ -139,6 +139,7 @@ func (d *Dispatcher) handleInitialize(id interface{}, params map[string]interfac
 	case <-warmupDone:
 	case <-time.After(initializeWarmupMs):
 		// 超时先返回，warmup goroutine 后台继续
+		log.Info("MCP initialize 预热超过 2 秒，先完成握手，后台继续连接 UE")
 	}
 
 	proxyCfg := d.manager.GetProxyConfig()
@@ -261,6 +262,7 @@ func (d *Dispatcher) handleToolsCall(id interface{}, params map[string]interface
 		outcome = d.manager.ForwardToolCall(forwardParams)
 		if outcome.Status == "disconnected" {
 			if d.manager.EnsureLongConnection() {
+				log.Infof("工具转发重连后重试 tool=%.80q capability=%.80q", toolName, callInfo.Capability)
 				callInfo = proxy.ParseCall(toolName, args, d.manager.CacheScope())
 				outcome = d.manager.ForwardToolCall(forwardParams)
 			}
@@ -270,6 +272,7 @@ func (d *Dispatcher) handleToolsCall(id interface{}, params map[string]interface
 	switch outcome.Status {
 	case "disconnected":
 		if snap := hub.LookupDegraded(callInfo, now); snap != nil {
+			log.Warnf("UE 未连接，返回缓存快照 tool=%.80q capability=%.80q snapshot=%.80q", toolName, callInfo.Capability, snap.SnapshotAt)
 			return makeResult(id, proxy.WrapDegraded(snap.Result, snap.SnapshotAt)), nil
 		}
 		d.manager.EnqueueProxyFeedback(unreal.ProxyFeedbackEvent{

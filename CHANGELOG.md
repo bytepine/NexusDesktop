@@ -5,6 +5,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- 发布包补齐 MCP 会话创建、握手、失效与淘汰、HTTP 拒绝、工具调用耗时和失败、SSE 通断、服务器停止原因，以及 UE 连接重置、转发重试、缓存快照、写入确认、响应落盘和更新检查日志；会话 ID 只记录摘要，避免输出 Token、工具参数和响应正文。
+
 ## [2.1.2] - 2026-10-22
 
 ### Changed

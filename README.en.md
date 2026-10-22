@@ -130,6 +130,14 @@ Cross-machine and auth: [usage-guide §1](https://github.com/bytepine/NexusLink/
 
 ---
 
+## Logs and connection diagnostics
+
+Use the tray's log-directory menu to find `nexusdesktop.log` (`%APPDATA%\NexusDesktop\logs` on Windows). Release builds record startup version and process ID, server stop reasons, MCP session creation and initialization, missing or unknown sessions, session eviction, SSE connections, and tool-call start, completion, duration and error codes at INFO/WARN level. Routine scan and heartbeat details remain at DEBUG.
+
+Match session events by the hashed `session` value and calls by the `request` number within one server run. `missing_session` means the header was absent; `unknown_session` means the ID is absent from the current server. `session_limit` and `waiting_for_initialize` identify eviction reasons. Logs omit Bearer tokens, complete session IDs, tool arguments and response bodies.
+
+When reporting a disconnect, include the incident time, AI client name/version, client error log and Desktop logs covering that time, including relevant rotated `nexusdesktop_*.log` files. Restarting the server invalidates existing sessions; clients must initialize again, which can be triggered by toggling the MCP connection in the client.
+
 ## Building locally
 
 Run `go vet ./...` and `go test ./...` before submitting. Tests cover the PascalCase contract and local HTTP/WebSocket multi-instance routing. Without CGO/OpenGL, use `go vet -tags ci ./...` and `go test -tags ci ./...` for headless checks; these do not replace a native GUI build.

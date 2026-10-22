@@ -105,11 +105,11 @@ func checkUpdateSync(currentVersion string) UpdateState {
 	if resolved == config.UpdateChannelPre {
 		atom, atomErr = fetchAtomTags(ua)
 		if atomErr != nil {
-			log.Debugf("检查更新：atom 失败: %v", atomErr)
+			log.Warnf("检查更新：atom 失败: %v", atomErr)
 		}
 	}
 	if stableErr != nil {
-		log.Debugf("检查更新：latest 失败: %v", stableErr)
+		log.Warnf("检查更新：latest 失败: %v", stableErr)
 		if resolved != config.UpdateChannelPre || len(atom) == 0 {
 			msg := "无法解析最新版本"
 			if stableErr != nil {
@@ -122,7 +122,7 @@ func checkUpdateSync(currentVersion string) UpdateState {
 	}
 
 	picked := selectUpdate(current, resolved, stable, atom)
-	log.Debugf("检查更新：当前 %s，渠道 %s→%s，latest %s，选中 %s",
+	log.Infof("检查更新：当前 %s，渠道 %s→%s，latest %s，选中 %s",
 		current, config.Get().UpdateChannel, resolved, stable, picked)
 
 	if current == "" || current == "dev" {

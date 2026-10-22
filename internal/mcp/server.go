@@ -5,6 +5,7 @@ package mcp
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/bytepine/NexusDesktop/internal/config"
@@ -30,9 +32,9 @@ const (
 
 // Server 是 NexusDesktop 的 MCP HTTP 服务器。
 //
-//   POST  /stream  — Streamable HTTP，per-session 会话隔离（Mcp-Session-Id）
-//   GET   /stream  — SSE 通知流（Streamable HTTP 规范）
-//   GET   /sse     — SSE 通知流（旧版 MCP 客户端兼容）
+//	POST  /stream  — Streamable HTTP，per-session 会话隔离（Mcp-Session-Id）
+//	GET   /stream  — SSE 通知流（Streamable HTTP 规范）
+//	GET   /sse     — SSE 通知流（旧版 MCP 客户端兼容）
 //
 // 不提供 CORS 预检：带 Origin 的请求一律拒绝（非浏览器客户端）。
 type Server struct {
@@ -45,8 +47,9 @@ type Server struct {
 	sessionOrder []string               // 插入序，用于 LRU 淘汰
 	sseClients   []*sseClient
 
-	Port       int
-	proxyToken string
+	Port           int
+	proxyToken     string
+	requestCounter atomic.Uint64
 }
 
 type sseClient struct {
@@ -79,6 +82,10 @@ func (s *Server) Start(preferredPort int, bindHost string) (int, error) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/stream", s.handleStream)
 	mux.HandleFunc("/sse", s.handleSSEEndpoint)
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		logHTTPRejection(r, http.StatusNotFound, "unsupported_endpoint")
+		http.NotFound(w, r)
+	})
 
 	srv := &http.Server{
 		Addr:              fmt.Sprintf("%s:%d", bindHost, port),
@@ -108,9 +115,14 @@ func (s *Server) Stop() {
 	if s.httpServer == nil {
 		return
 	}
+	s.mu.Lock()
+	log.Infof("MCP 服务器停止 port=%d sessions=%d sse=%d；现有会话将失效", s.Port, len(s.sessions), len(s.sseClients))
+	s.mu.Unlock()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	_ = s.httpServer.Shutdown(ctx)
+	if err := s.httpServer.Shutdown(ctx); err != nil {
+		log.Warnf("MCP 服务器关闭未完成: %v", err)
+	}
 	s.httpServer = nil
 	s.Port = 0
 
@@ -144,6 +156,7 @@ func (s *Server) SendToolsChangedNotification() {
 		default:
 			_, err := fmt.Fprint(c.w, payload)
 			if err != nil {
+				log.Warnf("MCP SSE 通知发送失败: %v", err)
 				dead = append(dead, c)
 				continue
 			}
@@ -173,6 +186,7 @@ func (s *Server) SendToolsChangedNotification() {
 func (s *Server) guard(next http.Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Origin") != "" {
+			logHTTPRejection(r, http.StatusForbidden, "browser_origin")
 			writeJSON(w, http.StatusForbidden, map[string]string{"error": "Browser Origin is not allowed"})
 			return
 		}
@@ -184,6 +198,7 @@ func (s *Server) guard(next http.Handler) http.HandlerFunc {
 		}
 		cfg := config.Get()
 		if cfg.RequireAuth && !config.TokenAccepted(presented, s.proxyToken, cfg.ExtraAuthTokens) {
+			logHTTPRejection(r, http.StatusUnauthorized, "invalid_authorization")
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Missing or invalid Authorization: Bearer token"})
 			return
 		}
@@ -199,6 +214,7 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		s.handleSSE(w, r)
 	default:
+		logHTTPRejection(r, http.StatusMethodNotAllowed, "unsupported_http_method")
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 	}
 }
@@ -206,6 +222,7 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 // handleSSEEndpoint 处理 GET /sse（旧版 MCP 客户端兼容入口）。
 func (s *Server) handleSSEEndpoint(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
+		logHTTPRejection(r, http.StatusMethodNotAllowed, "unsupported_http_method")
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		return
 	}
@@ -213,7 +230,10 @@ func (s *Server) handleSSEEndpoint(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePost(w http.ResponseWriter, r *http.Request) {
+	started := time.Now()
+	requestID := s.requestCounter.Add(1)
 	if r.ContentLength > maxBodyBytes {
+		logHTTPRejection(r, http.StatusRequestEntityTooLarge, "payload_too_large")
 		writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "payload too large"})
 		return
 	}
@@ -229,6 +249,7 @@ func (s *Server) handlePost(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		if err != nil {
+			logHTTPRejection(r, http.StatusRequestEntityTooLarge, "body_read_failed")
 			// 超限（ContentLength 缺失时只有这里能拦）不能带着截断的 body 继续，
 			// 否则客户端收到的是 JSON 解析错误而不是 413
 			writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "payload too large"})
@@ -237,6 +258,7 @@ func (s *Server) handlePost(w http.ResponseWriter, r *http.Request) {
 	}
 	body := strings.TrimSpace(sb.String())
 	if body == "" {
+		logHTTPRejection(r, http.StatusBadRequest, "empty_body")
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "empty body"})
 		return
 	}
@@ -257,13 +279,13 @@ func (s *Server) handlePost(w http.ResponseWriter, r *http.Request) {
 	var dispatcher *Dispatcher
 	if isInit {
 		sessionID = newSessionID()
-		log.Debugf("MCP 新会话 session=%s", sessionID[:8])
 		dispatcher = NewDispatcher(s.manager, func() { s.SendToolsChangedNotification() }, s.version)
 		s.sessions[sessionID] = dispatcher
 		s.sessionOrder = append(s.sessionOrder, sessionID)
 		// 清理其他处于 WaitingForInitialize 的陈旧会话
 		for k, d := range s.sessions {
 			if k != sessionID && d.IsWaitingForInitialize() {
+				log.Warnf("MCP 会话移除 session=%s reason=waiting_for_initialize", sessionLogID(k))
 				delete(s.sessions, k)
 			}
 		}
@@ -272,6 +294,9 @@ func (s *Server) handlePost(w http.ResponseWriter, r *http.Request) {
 			oldest := s.sessionOrder[0]
 			s.sessionOrder = s.sessionOrder[1:]
 			if oldest != sessionID {
+				if _, exists := s.sessions[oldest]; exists {
+					log.Warnf("MCP 会话移除 session=%s reason=session_limit limit=%d", sessionLogID(oldest), maxSessions)
+				}
 				delete(s.sessions, oldest)
 			}
 		}
@@ -281,15 +306,48 @@ func (s *Server) handlePost(w http.ResponseWriter, r *http.Request) {
 			dispatcher = d
 		}
 	}
+	activeSessions := len(s.sessions)
 	s.mu.Unlock()
 
 	if dispatcher == nil {
-		log.Debugf("MCP 请求无效 session=%s", incomingSessionID)
+		reason := "unknown_session"
+		if incomingSessionID == "" {
+			reason = "missing_session"
+		}
+		logHTTPRejection(r, http.StatusNotFound, reason)
+		log.Warnf("MCP 会话查找失败 request=%d session=%s %s sessions=%d；客户端需要重新 initialize", requestID, sessionLogID(incomingSessionID), rpcLogFields(parsed), activeSessions)
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Invalid or missing Mcp-Session-Id"})
 		return
 	}
 
+	fields := fmt.Sprintf("request=%d %s", requestID, rpcLogFields(parsed))
+	if isInit {
+		params, _ := parsed["params"].(map[string]interface{})
+		client, _ := params["clientInfo"].(map[string]interface{})
+		name, _ := client["name"].(string)
+		version, _ := client["version"].(string)
+		protocol, _ := params["protocolVersion"].(string)
+		log.Infof("MCP 新会话 session=%s previous=%s client=%.80q version=%.80q protocol=%.80q remote=%.80q sessions=%d", sessionLogID(sessionID), sessionLogID(incomingSessionID), name, version, protocol, r.RemoteAddr, activeSessions)
+	} else if parsed["method"] == "tools/call" {
+		log.Infof("MCP 请求开始 session=%s %s", sessionLogID(sessionID), fields)
+	}
 	resp, _ := dispatcher.Dispatch(body)
+	// 只记录结果类型与错误码，不把参数、响应正文或错误正文写入日志。
+	var result struct {
+		Error *struct {
+			Code int
+			Data struct{ ErrorKind string }
+		}
+		Result struct{ IsError bool }
+	}
+	_ = json.Unmarshal([]byte(resp), &result)
+	if result.Error != nil {
+		log.Warnf("MCP 请求失败 session=%s %s rpc_code=%d error_kind=%.80q elapsed_ms=%d", sessionLogID(sessionID), fields, result.Error.Code, result.Error.Data.ErrorKind, time.Since(started).Milliseconds())
+	} else if result.Result.IsError {
+		log.Warnf("MCP 工具失败 session=%s %s isError=true elapsed_ms=%d", sessionLogID(sessionID), fields, time.Since(started).Milliseconds())
+	} else if isInit || parsed["method"] == "notifications/initialized" || parsed["method"] == "tools/list" || parsed["method"] == "tools/call" {
+		log.Infof("MCP 请求完成 session=%s %s elapsed_ms=%d", sessionLogID(sessionID), fields, time.Since(started).Milliseconds())
+	}
 	w.Header().Set(mcpSessionHeader, sessionID)
 	if resp == "" {
 		w.WriteHeader(http.StatusAccepted)
@@ -297,24 +355,34 @@ func (s *Server) handlePost(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_, _ = fmt.Fprint(w, resp)
+	if _, err := fmt.Fprint(w, resp); err != nil {
+		log.Warnf("MCP 响应发送失败 session=%s %s: %v", sessionLogID(sessionID), fields, err)
+	}
 }
 
 func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
+	started := time.Now()
 	flusher, ok := w.(http.Flusher)
 	if !ok {
+		logHTTPRejection(r, http.StatusInternalServerError, "sse_not_supported")
 		http.Error(w, "SSE not supported", http.StatusInternalServerError)
 		return
 	}
 	s.mu.Lock()
 	if len(s.sseClients) >= maxSSEClients {
 		s.mu.Unlock()
+		logHTTPRejection(r, http.StatusServiceUnavailable, "sse_limit")
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "too many SSE clients"})
 		return
 	}
 	client := &sseClient{w: w, flusher: flusher, done: make(chan struct{})}
 	s.sseClients = append(s.sseClients, client)
+	clientCount := len(s.sseClients)
 	s.mu.Unlock()
+	log.Infof("MCP SSE 已连接 session=%s remote=%.80q clients=%d", sessionLogID(r.Header.Get(mcpSessionHeader)), r.RemoteAddr, clientCount)
+	defer func() {
+		log.Infof("MCP SSE 已断开 session=%s remote=%.80q elapsed_ms=%d", sessionLogID(r.Header.Get(mcpSessionHeader)), r.RemoteAddr, time.Since(started).Milliseconds())
+	}()
 
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -338,6 +406,7 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 					return
 				default:
 					if _, err := fmt.Fprint(w, ": keepalive\n\n"); err != nil {
+						log.Warnf("MCP SSE 心跳发送失败 session=%s: %v", sessionLogID(r.Header.Get(mcpSessionHeader)), err)
 						return
 					}
 					flusher.Flush()
@@ -363,6 +432,35 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 // ------------------------------------------------------------
 // 工具函数
 // ------------------------------------------------------------
+
+// 会话标识只写摘要；仍可将创建、淘汰和失败请求关联起来。
+func sessionLogID(id string) string {
+	if id == "" {
+		return "none"
+	}
+	sum := sha256.Sum256([]byte(id))
+	return fmt.Sprintf("%x", sum[:6])
+}
+
+func logHTTPRejection(r *http.Request, status int, reason string) {
+	log.Warnf("MCP HTTP 请求拒绝 status=%d reason=%s http_method=%.16q path=%.80q remote=%.80q session=%s", status, reason, r.Method, r.URL.EscapedPath(), r.RemoteAddr, sessionLogID(r.Header.Get(mcpSessionHeader)))
+}
+
+func rpcLogFields(msg map[string]interface{}) string {
+	method, _ := msg["method"].(string)
+	params, _ := msg["params"].(map[string]interface{})
+	tool, _ := params["name"].(string)
+	args, _ := params["arguments"].(map[string]interface{})
+	capKey, fallbackKey := "Capability", "capability"
+	if tool == "call_capability" {
+		capKey, fallbackKey = fallbackKey, capKey
+	}
+	capability, _ := args[capKey].(string)
+	if capability == "" {
+		capability, _ = args[fallbackKey].(string)
+	}
+	return fmt.Sprintf("method=%.80q tool=%.80q capability=%.80q", method, tool, capability)
+}
 
 func writeJSON(w http.ResponseWriter, code int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")

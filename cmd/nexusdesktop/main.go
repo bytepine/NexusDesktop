@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"runtime/debug"
 	"sync"
 	"time"
@@ -48,14 +49,17 @@ func main() {
 	// 初始化配置与日志（须在 recover 之前，便于 crash.log 落盘到同一目录）
 	cfg, cfgErr := config.Load()
 	// 解析失败时 cfg 是默认值，此时回写等于把用户设置清空（原文件已备份为 config.json.bak）
-	if cfgErr == nil {
-		_ = config.Save(cfg)
-	}
 	i18n.Apply(cfg.Language)
 	nlog.Init(config.AppDir())
 	defer recoverAndLogCrash()
 
-	nlog.Infof("NexusDesktop v%s 启动", appVersion)
+	nlog.Infof("NexusDesktop v%s 启动 pid=%d platform=%s/%s log_level=%s", appVersion, os.Getpid(), runtime.GOOS, runtime.GOARCH, nlog.CurrentLevel())
+	if cfgErr != nil {
+		nlog.Warnf("配置读取失败，使用默认配置且不回写: %v", cfgErr)
+	} else if err := config.Save(cfg); err != nil {
+		nlog.Errorf("启动配置保存失败: %v", err)
+	}
+	nlog.Infof("启动配置 enabled=%t port=%d listen_lan=%t require_auth=%t scan=%d-%d interval_s=%d remote_count=%d", cfg.Enabled, cfg.HTTPPort, cfg.ListenLan, cfg.RequireAuth, cfg.ScanPortStart, cfg.ScanPortEnd, cfg.ScanIntervalSeconds, len(cfg.RemoteUnreal))
 
 	// 若曾启用开机自启但 exe 已迁移/删除，自动重写为当前路径
 	ui.RepairAutostart()
@@ -146,12 +150,13 @@ func main() {
 		}
 	}
 
-	stopServer := func() {
+	stopServer := func(reason string) {
 		mu.Lock()
 		defer mu.Unlock()
 		if server == nil {
 			return
 		}
+		nlog.Infof("停止 MCP 中转 reason=%s", reason)
 		server.Stop()
 		server = nil
 		mgr.OnConnectionChanged = nil
@@ -215,11 +220,12 @@ func main() {
 
 	// 注入托盘回调
 	tray.OnToggleServer = func(enabled bool) {
+		nlog.Infof("托盘切换 MCP 中转 enabled=%t", enabled)
 		if enabled {
 			startServer()
 			startScanTimer()
 		} else {
-			stopServer()
+			stopServer("tray_disabled")
 			stopScanTimer()
 			mgr.Disconnect()
 		}
@@ -248,6 +254,7 @@ func main() {
 
 	// 配置变更热更新：扫描参数、启停、MCP 端口重启
 	config.OnChange(func(c config.Config) {
+		nlog.Infof("配置变更 enabled=%t port=%d listen_lan=%t require_auth=%t scan=%d-%d interval_s=%d remote_count=%d write_gate=%.32q update_channel=%.32q", c.Enabled, c.HTTPPort, c.ListenLan, c.RequireAuth, c.ScanPortStart, c.ScanPortEnd, c.ScanIntervalSeconds, len(c.RemoteUnreal), c.WriteGate, c.UpdateChannel)
 		i18n.Apply(c.Language)
 		mgr.ScanPortStart = c.ScanPortStart
 		mgr.ScanPortEnd = c.ScanPortEnd
@@ -259,7 +266,7 @@ func main() {
 			tray.RequestCheck(true)
 		}
 		if !c.Enabled {
-			stopServer()
+			stopServer("config_disabled")
 			stopScanTimer()
 			mgr.Disconnect()
 			return
@@ -268,7 +275,7 @@ func main() {
 		running := server != nil
 		mu.Unlock()
 		if !running || lastHTTPPort != c.HTTPPort || lastListenLan != c.ListenLan {
-			stopServer()
+			stopServer("listener_config_changed")
 			startServer()
 			lastHTTPPort = c.HTTPPort
 			lastListenLan = c.ListenLan
@@ -297,7 +304,7 @@ func main() {
 	// 退出清理
 	nlog.Info("NexusDesktop 退出")
 	stopScanTimer()
-	stopServer()
+	stopServer("app_exit")
 	mgr.Dispose()
 }
 

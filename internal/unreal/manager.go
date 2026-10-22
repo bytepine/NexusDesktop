@@ -186,6 +186,7 @@ func (m *Manager) MaintainConnection() {
 		if info != nil {
 			return // 心跳成功，省去全量扫描
 		}
+		log.Warnf("UE 状态探测失败，重置连接 host=%.80q port=%d", connHost, port)
 		m.mu.Lock()
 		m.resetWsConnection(false)
 		m.mu.Unlock()
@@ -231,6 +232,9 @@ func (m *Manager) DiscoverInstances() []InstanceInfo {
 	pending := len(m.pendingRequests)
 	cb := m.OnInstancesChanged
 	m.mu.Unlock()
+	if changed {
+		log.Infof("UE 实例列表变化 count=%d", len(found))
+	}
 
 	// 仅实例列表真正变化时才触发托盘刷新
 	if changed && cb != nil {
@@ -259,6 +263,7 @@ func (m *Manager) DiscoverInstances() []InstanceInfo {
 			}
 		}
 		if !exists {
+			log.Warnf("已连接 UE 不在扫描结果中，重置连接 host=%.80q port=%d", connHost, connPort)
 			m.mu.Lock()
 			m.resetWsConnection(false)
 			m.mu.Unlock()
@@ -483,8 +488,10 @@ func (m *Manager) ConnectTo(port int, setPreferred bool, hostOpt ...string) bool
 
 	info := m.probeStatus(port, targetHost, m.tokenFor(targetHost, port))
 	if info == nil {
+		log.Warnf("UE 连接失败 stage=status_probe host=%.80q port=%d manual=%t", targetHost, port, setPreferred)
 		return false
 	}
+	log.Infof("开始连接 UE host=%.80q port=%d ws_port=%d manual=%t", targetHost, port, info.WsPort, setPreferred)
 
 	m.mu.Lock()
 	m.resetWsConnection(false)
@@ -514,7 +521,7 @@ func (m *Manager) ConnectTo(port int, setPreferred bool, hostOpt ...string) bool
 	m.connectedToolsListMode = info.ToolsListMode
 	m.mu.Unlock()
 
-	log.Infof("已连接 UE 实例 port=%d wsPort=%d project=%s", port, info.WsPort, info.ProjectName)
+	log.Infof("已连接 UE 实例 host=%.80q port=%d wsPort=%d project=%.80q epoch=%d", targetHost, port, info.WsPort, info.ProjectName, epoch)
 
 	// 启动消息接收与保活
 	go m.receiveLoop(conn, epoch)
@@ -536,6 +543,7 @@ func (m *Manager) ConnectTo(port int, setPreferred bool, hostOpt ...string) bool
 // Disconnect 主动断开当前连接，清除 preferredPort。
 // Disconnect 主动断开连接并抑制自动重连，直到用户手动连接。
 func (m *Manager) Disconnect() {
+	log.Info("主动断开 UE，暂停自动重连直到下一次手动连接")
 	m.mu.Lock()
 	m.manuallyDisconnected = true
 	m.resetWsConnection(true)
@@ -581,6 +589,9 @@ func (m *Manager) EnsureLongConnection() bool {
 
 func (m *Manager) resetWsConnection(clearPreferred bool) {
 	// 调用方须持有 mu 锁
+	if m.ws != nil || len(m.pendingRequests) > 0 {
+		log.Infof("重置 UE 连接 host=%.80q port=%d pending=%d clear_preferred=%t", m.ConnectedHost, m.ConnectedPort, len(m.pendingRequests), clearPreferred)
+	}
 	m.releasePendingRequests()
 	m.stopKeepalive()
 	if m.ws != nil {
@@ -624,8 +635,12 @@ func (m *Manager) receiveLoop(conn *websocket.Conn, epoch int64) {
 		if err != nil {
 			// 检查是否为当前 epoch（防旧 socket 的 close 误清新连接）
 			if atomic.LoadInt64(&m.connectionEpoch) == epoch {
-				log.Warnf("WS 读取错误（epoch=%d）: %v，准备重扫", epoch, err)
 				m.mu.Lock()
+				if m.ws == conn {
+					log.Warnf("WS 读取错误 host=%.80q port=%d epoch=%d pending=%d: %v，准备重扫", m.ConnectedHost, m.ConnectedPort, epoch, len(m.pendingRequests), err)
+				} else {
+					log.Debugf("WS 已主动关闭 epoch=%d: %v", epoch, err)
+				}
 				m.stopKeepalive()
 				m.ws = nil
 				prev := m.ConnectedPort
@@ -650,6 +665,7 @@ func (m *Manager) receiveLoop(conn *websocket.Conn, epoch int64) {
 func (m *Manager) handleWsMessage(data []byte) {
 	var msg map[string]interface{}
 	if err := json.Unmarshal(data, &msg); err != nil {
+		log.Warnf("WS 收到无效 JSON bytes=%d: %v", len(data), err)
 		return
 	}
 	// 匹配挂起请求响应
@@ -669,6 +685,8 @@ func (m *Manager) handleWsMessage(data []byte) {
 		m.mu.Unlock()
 		if found {
 			ch <- WsRequestResult{Status: "ok", Response: msg}
+		} else {
+			log.Debugf("WS 响应无对应请求 id=%d（可能已超时）", id)
 		}
 		return
 	}
@@ -725,6 +743,9 @@ func (m *Manager) startKeepalive(conn *websocket.Conn, epoch int64) {
 				}
 				m.mu.Unlock()
 				if !wsAlive || err != nil {
+					if err != nil {
+						log.Warnf("WS 保活发送失败 epoch=%d: %v", epoch, err)
+					}
 					return
 				}
 			}
@@ -846,6 +867,7 @@ func (m *Manager) ForwardToolCallToPort(port int, params map[string]interface{},
 	if info == nil {
 		probed := m.probeStatus(port, host, m.tokenFor(host, port))
 		if probed == nil {
+			log.Warnf("UE 一次性转发失败 stage=status_probe host=%.80q port=%d", host, port)
 			return WsRequestResult{Status: "disconnected"}
 		}
 		info = probed
@@ -854,12 +876,14 @@ func (m *Manager) ForwardToolCallToPort(port int, params map[string]interface{},
 	dialer := websocket.Dialer{HandshakeTimeout: wsHandshakeTimeout}
 	conn, _, err := dialer.Dial(fmt.Sprintf("ws://%s:%d", info.Host, info.WsPort), nil)
 	if err != nil {
+		log.Warnf("UE 一次性转发失败 stage=ws_connect host=%.80q port=%d ws_port=%d: %v", host, port, info.WsPort, err)
 		return WsRequestResult{Status: "disconnected"}
 	}
 	defer conn.Close()
 
 	if info.AuthRequired {
 		if !authWebSocketAny(conn, m.tokensFor(info.Host, port)) {
+			log.Warnf("UE 一次性转发失败 stage=auth host=%.80q port=%d", host, port)
 			return WsRequestResult{Status: "disconnected"}
 		}
 	}
@@ -872,15 +896,18 @@ func (m *Manager) ForwardToolCallToPort(port int, params map[string]interface{},
 		"params":  params,
 	}
 	if err := conn.WriteJSON(req); err != nil {
+		log.Warnf("UE 一次性转发失败 stage=send host=%.80q port=%d id=%d: %v", host, port, id, err)
 		return WsRequestResult{Status: "disconnected"}
 	}
 	_ = conn.SetReadDeadline(time.Now().Add(toolsCallTimeoutMs))
 	_, data, err := conn.ReadMessage()
 	if err != nil {
+		log.Warnf("UE 一次性转发失败 stage=read host=%.80q port=%d id=%d timeout_ms=%d: %v", host, port, id, toolsCallTimeoutMs.Milliseconds(), err)
 		return WsRequestResult{Status: "timeout"}
 	}
 	var resp map[string]interface{}
 	if err := json.Unmarshal(data, &resp); err != nil {
+		log.Warnf("UE 一次性转发失败 stage=decode host=%.80q port=%d id=%d bytes=%d: %v", host, port, id, len(data), err)
 		return WsRequestResult{Status: "disconnected"}
 	}
 	return WsRequestResult{Status: "ok", Response: resp}
@@ -952,12 +979,17 @@ func (m *Manager) GetProxyConfig() ProxyConfig {
 // sendWsRequest 在长连接上串行发送一条 JSON-RPC 请求并等待响应。
 func (m *Manager) sendWsRequest(method string, params map[string]interface{}, timeout time.Duration) WsRequestResult {
 	// 获取串行令牌
+	queued := time.Now()
 	<-m.requestChain
 	defer func() { m.requestChain <- struct{}{} }()
+	if waited := time.Since(queued); waited >= time.Second {
+		log.Infof("WS 请求排队 method=%.80q wait_ms=%d", method, waited.Milliseconds())
+	}
 
 	m.mu.Lock()
 	if m.ws == nil {
 		m.mu.Unlock()
+		log.Debugf("WS 请求未发送 method=%.80q reason=disconnected", method)
 		return WsRequestResult{Status: "disconnected"}
 	}
 	id := atomic.AddInt64(&m.idCounter, 1)
@@ -991,7 +1023,7 @@ func (m *Manager) sendWsRequest(method string, params map[string]interface{}, ti
 		m.mu.Lock()
 		delete(m.pendingRequests, id)
 		m.mu.Unlock()
-		log.Warnf("WS 超时 method=%s id=%d", method, id)
+		log.Warnf("WS 超时 method=%.80q id=%d timeout_ms=%d", method, id, timeout.Milliseconds())
 		return WsRequestResult{Status: "timeout"}
 	}
 }

@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/bytepine/NexusDesktop/internal/log"
 )
 
 const (
@@ -91,6 +93,7 @@ func (h *Hub) SetPaused(v bool) {
 		return
 	}
 	h.paused = v
+	log.Infof("Agent 转发暂停状态 paused=%t", v)
 	if !v {
 		h.pauseWait.Broadcast()
 	}
@@ -118,12 +121,15 @@ func (h *Hub) ConfirmIfNeeded(info CallInfo) GateDecision {
 	if prompter == nil {
 		return DecisionAllow
 	}
+	log.Infof("等待写入确认 capability=%.80q timeout_ms=%d", info.Capability, GateTimeoutMS)
 	ch := make(chan GateDecision, 1)
 	go func() { ch <- prompter(info) }()
 	select {
 	case d := <-ch:
+		log.Infof("写入确认结束 capability=%.80q decision=%v", info.Capability, d)
 		return d
 	case <-time.After(time.Duration(GateTimeoutMS) * time.Millisecond):
+		log.Warnf("写入确认超时 capability=%.80q timeout_ms=%d", info.Capability, GateTimeoutMS)
 		return DecisionDeny
 	}
 }
@@ -231,23 +237,28 @@ func (h *Hub) invalidateIdentity(identity, cacheScope string) {
 func (h *Hub) offload(result interface{}) interface{} {
 	pruneOffload(offloadMaxAge)
 	if err := os.MkdirAll(h.offloadDir, offloadDirPerm); err != nil {
+		log.Warnf("大响应落盘失败 stage=mkdir，保留原响应: %v", err)
 		return result
 	}
 	b, err := json.Marshal(result)
 	if err != nil {
+		log.Warnf("大响应落盘失败 stage=encode，保留原响应: %v", err)
 		return result
 	}
 	f, err := os.CreateTemp(h.offloadDir, "offload-*.json")
 	if err != nil {
+		log.Warnf("大响应落盘失败 stage=create，保留原响应: %v", err)
 		return result
 	}
 	file := f.Name()
 	_, writeErr := f.Write(b)
 	closeErr := f.Close()
 	if writeErr != nil || closeErr != nil {
+		log.Warnf("大响应落盘失败 stage=write，保留原响应 write_err=%v close_err=%v", writeErr, closeErr)
 		_ = os.Remove(file)
 		return result
 	}
+	log.Infof("大响应已落盘 bytes=%d file=%q", len(b), file)
 	summary := map[string]interface{}{
 		"content": []interface{}{map[string]interface{}{
 			"type": "text",
