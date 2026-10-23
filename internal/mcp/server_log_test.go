@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/bytepine/NexusDesktop/internal/log"
 	"github.com/bytepine/NexusDesktop/internal/unreal"
@@ -48,7 +49,7 @@ func TestReleaseDiagnostics(t *testing.T) {
 	logs := string(data)
 	for _, want := range []string{
 		"reason=browser_origin", "reason=missing_session", "reason=unknown_session",
-		"reason=payload_too_large", "reason=empty_body", "reason=waiting_for_initialize", "reason=session_limit",
+		"reason=payload_too_large", "reason=empty_body", "reason=idle_timeout", "reason=session_limit",
 		"[INFO] MCP 新会话", `client="Test\nClient"`, `version="1.2"`, `protocol="2025-06-18"`,
 		"[INFO] MCP 请求开始", `method="tools/call"`, `capability="GetExample"`,
 		"[INFO] MCP 请求完成", "[WARN] MCP 请求失败", "[WARN] MCP 工具失败", "isError=true", "rpc_code=-32601", "rpc_code=-32700", "elapsed_ms=",
@@ -75,8 +76,8 @@ func exerciseDiagnostics(t *testing.T) {
 	}
 	s := NewServer(manager, "test", "private-bearer-token")
 	const session = "private-session-id"
-	s.sessions[session] = NewDispatcher(manager, nil, "test")
-	s.sessions[session].state = stateRunning
+	s.sessions[session] = &httpSession{dispatcher: NewDispatcher(manager, nil, "test"), lastUsed: time.Now()}
+	s.sessions[session].dispatcher.state = stateRunning
 	post := func(id, body string, status int) *httptest.ResponseRecorder {
 		t.Helper()
 		r := httptest.NewRequest(http.MethodPost, "/stream?secret=private-query-value", strings.NewReader(body))
@@ -107,14 +108,15 @@ func exerciseDiagnostics(t *testing.T) {
 	r.Header.Set("Authorization", "Bearer private-bearer-token")
 	s.guard(http.HandlerFunc(s.handleStream))(httptest.NewRecorder(), r)
 
-	// 已完成的会话超过上限，另保留一个初始化前会话以覆盖两种清理原因。
-	s.sessionOrder = []string{session}
+	// 上限已满时拒绝新连接；仅在旧会话真正空闲后回收。
 	for i := 1; i < maxSessions; i++ {
 		id := fmt.Sprintf("session-%d", i)
-		s.sessions[id] = &Dispatcher{state: stateRunning}
-		s.sessionOrder = append(s.sessionOrder, id)
+		s.sessions[id] = &httpSession{dispatcher: &Dispatcher{state: stateRunning}, lastUsed: time.Now()}
 	}
-	s.sessions["waiting"] = &Dispatcher{state: stateWaitingForInitialize}
+	post("", `{"jsonrpc":"2.0","id":5,"method":"initialize"}`, http.StatusServiceUnavailable)
+	for _, entry := range s.sessions {
+		entry.lastUsed = time.Now().Add(-sessionIdleTime)
+	}
 	w := post("", `{"jsonrpc":"2.0","id":5,"method":"initialize","params":{"protocolVersion":"2025-06-18","clientInfo":{"name":"Test\nClient","version":"1.2"}}}`, http.StatusOK)
 	newSession := w.Header().Get(mcpSessionHeader)
 	if newSession == "" {

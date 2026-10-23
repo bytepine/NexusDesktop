@@ -64,11 +64,6 @@ func NewDispatcher(mgr *unreal.Manager, onReady func(), version string) *Dispatc
 	}
 }
 
-// IsWaitingForInitialize 返回会话是否仍处于初始化前状态（用于陈旧会话淘汰）。
-func (d *Dispatcher) IsWaitingForInitialize() bool {
-	return d.state == stateWaitingForInitialize
-}
-
 // Dispatch 处理一条 JSON-RPC 消息字符串，返回响应 JSON 或空串（通知类无需回复）。
 func (d *Dispatcher) Dispatch(body string) (string, error) {
 	var msg map[string]interface{}

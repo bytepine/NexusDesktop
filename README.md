@@ -134,7 +134,9 @@
 
 托盘「打开日志目录」中的 `nexusdesktop_<启动时间>_pid<进程ID>_<分段>_*.log` 记录启动版本、进程 ID、服务器启停原因、MCP 会话创建与握手、会话失效或淘汰、SSE 通断，以及工具调用开始、结束、耗时和错误码。每次启动新建文件，不追加或覆盖上次日志；同次启动超过 4 MiB 后写入新分段。Windows 日志目录为 `%APPDATA%\NexusDesktop\logs`。发布包的 INFO 级别即可看到这些记录，无需开发包；扫描与心跳的常规细节仍在 DEBUG。
 
-会话通过 `session` 摘要关联，同一次服务器运行内的调用通过 `request` 编号关联；`missing_session` 表示客户端未携带会话 ID，`unknown_session` 表示 ID 在当前服务器中不存在。`session_limit` 和 `waiting_for_initialize` 标明会话清理原因。日志不记录 Bearer Token、完整会话 ID、工具参数或响应正文。
+会话通过 `session` 摘要关联，同一次服务器运行内的调用通过 `request` 编号关联；`missing_session` 表示客户端未携带会话 ID，`unknown_session` 表示 ID 在当前服务器中不存在。日志不记录 Bearer Token、完整会话 ID、工具参数或响应正文。
+
+最多保留 50 个 MCP 会话；容量满时仅回收超过 30 分钟没有请求、也没有进行中调用或 SSE 连接的会话（`idle_timeout`）。正在初始化或使用的会话不会被新连接淘汰；无法回收时，新连接返回 503 和 `Retry-After`（`session_limit`）。客户端可通过携带会话 ID 的 `DELETE /stream` 主动结束会话（`client_delete`）。回收后的 ID 需要重新 `initialize`。
 
 反馈断连时，请提供报错时间、AI 客户端名称与版本、客户端错误日志，以及对应启动时间和分段的 `nexusdesktop_*.log`；旧版本留下的 `nexusdesktop.log` 仍可用于排查之前的问题。服务器重启后原会话会失效，客户端需要重新 `initialize`，可关闭再开启该 MCP 连接。
 

@@ -25,6 +25,7 @@ import (
 const (
 	mcpSessionHeader = "Mcp-Session-Id"
 	maxSessions      = 50
+	sessionIdleTime  = 30 * time.Minute
 	maxSSEClients    = 32
 	sseKeepaliveMs   = 20_000 * time.Millisecond
 	maxBodyBytes     = 1024 * 1024
@@ -35,6 +36,7 @@ const (
 //	POST  /stream  — Streamable HTTP，per-session 会话隔离（Mcp-Session-Id）
 //	GET   /stream  — SSE 通知流（Streamable HTTP 规范）
 //	GET   /sse     — SSE 通知流（旧版 MCP 客户端兼容）
+//	DELETE /stream — 客户端主动结束会话
 //
 // 不提供 CORS 预检：带 Origin 的请求一律拒绝（非浏览器客户端）。
 type Server struct {
@@ -42,14 +44,20 @@ type Server struct {
 	version    string
 	httpServer *http.Server
 
-	mu           sync.Mutex
-	sessions     map[string]*Dispatcher // sessionId → Dispatcher
-	sessionOrder []string               // 插入序，用于 LRU 淘汰
-	sseClients   []*sseClient
+	mu         sync.Mutex
+	sessions   map[string]*httpSession
+	sseClients []*sseClient
 
 	Port           int
 	proxyToken     string
 	requestCounter atomic.Uint64
+}
+
+// 会话状态不代表是否陈旧；初始化、工具调用和 SSE 均持有 active，避免被容量回收误删。
+type httpSession struct {
+	dispatcher *Dispatcher
+	lastUsed   time.Time
+	active     int
 }
 
 type sseClient struct {
@@ -64,7 +72,7 @@ func NewServer(mgr *unreal.Manager, version, proxyToken string) *Server {
 		manager:    mgr,
 		version:    version,
 		proxyToken: proxyToken,
-		sessions:   make(map[string]*Dispatcher),
+		sessions:   make(map[string]*httpSession),
 	}
 }
 
@@ -131,8 +139,7 @@ func (s *Server) Stop() {
 		close(c.done)
 	}
 	s.sseClients = nil
-	s.sessions = make(map[string]*Dispatcher)
-	s.sessionOrder = nil
+	s.sessions = make(map[string]*httpSession)
 	s.mu.Unlock()
 }
 
@@ -213,6 +220,18 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 		s.handlePost(w, r)
 	case http.MethodGet:
 		s.handleSSE(w, r)
+	case http.MethodDelete:
+		id := r.Header.Get(mcpSessionHeader)
+		s.mu.Lock()
+		_, exists := s.sessions[id]
+		delete(s.sessions, id)
+		s.mu.Unlock()
+		if !exists {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "Invalid or missing Mcp-Session-Id"})
+			return
+		}
+		log.Infof("MCP 会话移除 session=%s reason=client_delete", sessionLogID(id))
+		w.WriteHeader(http.StatusNoContent)
 	default:
 		logHTTPRejection(r, http.StatusMethodNotAllowed, "unsupported_http_method")
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
@@ -276,40 +295,42 @@ func (s *Server) handlePost(w http.ResponseWriter, r *http.Request) {
 
 	s.mu.Lock()
 	var sessionID string
-	var dispatcher *Dispatcher
+	var session *httpSession
 	if isInit {
-		sessionID = newSessionID()
-		dispatcher = NewDispatcher(s.manager, func() { s.SendToolsChangedNotification() }, s.version)
-		s.sessions[sessionID] = dispatcher
-		s.sessionOrder = append(s.sessionOrder, sessionID)
-		// 清理其他处于 WaitingForInitialize 的陈旧会话
-		for k, d := range s.sessions {
-			if k != sessionID && d.IsWaitingForInitialize() {
-				log.Warnf("MCP 会话移除 session=%s reason=waiting_for_initialize", sessionLogID(k))
-				delete(s.sessions, k)
-			}
-		}
-		// 超上限 LRU 淘汰
-		for len(s.sessions) > maxSessions && len(s.sessionOrder) > 0 {
-			oldest := s.sessionOrder[0]
-			s.sessionOrder = s.sessionOrder[1:]
-			if oldest != sessionID {
-				if _, exists := s.sessions[oldest]; exists {
-					log.Warnf("MCP 会话移除 session=%s reason=session_limit limit=%d", sessionLogID(oldest), maxSessions)
+		// 仅容量不足时回收空闲会话；不按状态或创建顺序删除正在使用的会话。
+		now := time.Now()
+		if len(s.sessions) >= maxSessions {
+			for id, old := range s.sessions {
+				if old.active == 0 && now.Sub(old.lastUsed) >= sessionIdleTime {
+					log.Infof("MCP 会话移除 session=%s reason=idle_timeout", sessionLogID(id))
+					delete(s.sessions, id)
 				}
-				delete(s.sessions, oldest)
 			}
 		}
-	} else if incomingSessionID != "" {
-		if d, ok := s.sessions[incomingSessionID]; ok {
-			sessionID = incomingSessionID
-			dispatcher = d
+		if len(s.sessions) >= maxSessions {
+			s.mu.Unlock()
+			logHTTPRejection(r, http.StatusServiceUnavailable, "session_limit")
+			w.Header().Set("Retry-After", "1")
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "too many active MCP sessions"})
+			return
 		}
+		sessionID = newSessionID()
+		session = &httpSession{dispatcher: NewDispatcher(s.manager, func() { s.SendToolsChangedNotification() }, s.version), lastUsed: now}
+		s.sessions[sessionID] = session
+	} else if incomingSessionID != "" {
+		if existing, ok := s.sessions[incomingSessionID]; ok {
+			sessionID = incomingSessionID
+			session = existing
+		}
+	}
+	if session != nil {
+		session.active++
+		session.lastUsed = time.Now()
 	}
 	activeSessions := len(s.sessions)
 	s.mu.Unlock()
 
-	if dispatcher == nil {
+	if session == nil {
 		reason := "unknown_session"
 		if incomingSessionID == "" {
 			reason = "missing_session"
@@ -319,6 +340,7 @@ func (s *Server) handlePost(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "Invalid or missing Mcp-Session-Id"})
 		return
 	}
+	defer s.releaseSession(session)
 
 	fields := fmt.Sprintf("request=%d %s", requestID, rpcLogFields(parsed))
 	if isInit {
@@ -331,7 +353,7 @@ func (s *Server) handlePost(w http.ResponseWriter, r *http.Request) {
 	} else if parsed["method"] == "tools/call" {
 		log.Infof("MCP 请求开始 session=%s %s", sessionLogID(sessionID), fields)
 	}
-	resp, _ := dispatcher.Dispatch(body)
+	resp, _ := session.dispatcher.Dispatch(body)
 	// 只记录结果类型与错误码，不把参数、响应正文或错误正文写入日志。
 	var result struct {
 		Error *struct {
@@ -377,10 +399,18 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 	}
 	client := &sseClient{w: w, flusher: flusher, done: make(chan struct{})}
 	s.sseClients = append(s.sseClients, client)
+	session := s.sessions[r.Header.Get(mcpSessionHeader)]
+	if session != nil {
+		session.active++
+		session.lastUsed = time.Now()
+	}
 	clientCount := len(s.sseClients)
 	s.mu.Unlock()
 	log.Infof("MCP SSE 已连接 session=%s remote=%.80q clients=%d", sessionLogID(r.Header.Get(mcpSessionHeader)), r.RemoteAddr, clientCount)
 	defer func() {
+		if session != nil {
+			s.releaseSession(session)
+		}
 		log.Infof("MCP SSE 已断开 session=%s remote=%.80q elapsed_ms=%d", sessionLogID(r.Header.Get(mcpSessionHeader)), r.RemoteAddr, time.Since(started).Milliseconds())
 	}()
 
@@ -427,6 +457,13 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 	}
 	s.sseClients = filtered
 	s.mu.Unlock()
+}
+
+func (s *Server) releaseSession(session *httpSession) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	session.active--
+	session.lastUsed = time.Now()
 }
 
 // ------------------------------------------------------------

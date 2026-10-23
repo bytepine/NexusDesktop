@@ -134,7 +134,9 @@ Cross-machine and auth: [usage-guide §1](https://github.com/bytepine/NexusLink/
 
 Use the tray's log-directory menu to find `nexusdesktop_<startup>_pid<PID>_<part>_*.log` (`%APPDATA%\NexusDesktop\logs` on Windows). Each startup creates a new file; files from previous runs are preserved. A run continues in a new part after 4 MiB. Release builds record startup version and process ID, server stop reasons, MCP session creation and initialization, missing or unknown sessions, session eviction, SSE connections, and tool-call start, completion, duration and error codes at INFO/WARN level. Routine scan and heartbeat details remain at DEBUG.
 
-Match session events by the hashed `session` value and calls by the `request` number within one server run. `missing_session` means the header was absent; `unknown_session` means the ID is absent from the current server. `session_limit` and `waiting_for_initialize` identify eviction reasons. Logs omit Bearer tokens, complete session IDs, tool arguments and response bodies.
+Match session events by the hashed `session` value and calls by the `request` number within one server run. `missing_session` means the header was absent; `unknown_session` means the ID is absent from the current server. Logs omit Bearer tokens, complete session IDs, tool arguments and response bodies.
+
+The server retains up to 50 MCP sessions. At capacity, it reclaims only sessions with no requests for 30 minutes and no in-flight calls or SSE connections (`idle_timeout`). New connections never evict sessions that are initializing or active; if no capacity can be freed, initialization returns 503 with `Retry-After` (`session_limit`). Clients can end a session with `DELETE /stream` and its session ID (`client_delete`). Reclaimed IDs require a new `initialize`.
 
 When reporting a disconnect, include the incident time, AI client name/version, client error log and Desktop logs covering that time, including relevant rotated `nexusdesktop_*.log` files. Restarting the server invalidates existing sessions; clients must initialize again, which can be triggered by toggling the MCP connection in the client.
 
