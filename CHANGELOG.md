@@ -5,6 +5,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- 重新连接 UE 时清理远端工具清单缓存，修复插件升级或切换实例后仍发布旧工具名、导致工具转发失败的问题；补充旧/新工具清单及实际转发回归。
+
 ## [2.2.0] - 2026-10-23
 
 ### Added

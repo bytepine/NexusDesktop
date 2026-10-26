@@ -140,9 +140,11 @@
 
 反馈断连时，请提供报错时间、AI 客户端名称与版本、客户端错误日志，以及对应启动时间和分段的 `nexusdesktop_*.log`；旧版本留下的 `nexusdesktop.log` 仍可用于排查之前的问题。服务器重启后原会话会失效，客户端需要重新 `initialize`，可关闭再开启该 MCP 连接。
 
+UE 重新连接或切换实例后会重新读取 `tools/list`，不沿用上一连接的工具名与参数清单。意外断线期间可保留上次清单；如果 AI 客户端仍缓存旧 Schema，可重新连接该 MCP 服务刷新。
+
 ## 本地构建
 
-提交前运行 `go vet ./...` 与 `go test ./...`，其中包含当前 PascalCase 契约和本地 HTTP/WebSocket 多实例转发回归。无 CGO/OpenGL 的环境可用 `go vet -tags ci ./...` 与 `go test -tags ci ./...` 做无窗口检查；这不代替原生 GUI 构建。
+提交前运行 `go vet ./...` 与 `go test ./...`，其中包含当前 PascalCase 契约和本地 HTTP/WebSocket 多实例转发、旧/新工具名重连刷新回归。无 CGO/OpenGL 的环境可用 `go vet -tags ci ./...` 与 `go test -tags ci ./...` 做无窗口检查；这不代替原生 GUI 构建。
 
 - Go 1.25+
 - GCC / MinGW-w64（Windows）或 Xcode CLI（macOS）— Fyne 需要 CGO

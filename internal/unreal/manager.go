@@ -602,6 +602,8 @@ func (m *Manager) resetWsConnection(clearPreferred bool) {
 	m.ConnectedPort = -1
 	m.ConnectedHost = LoopbackHost
 	m.connectedToolsListMode = "starter"
+	// 断线期间可保留清单；开始新连接时必须重新读取，避免继续发布旧工具名。
+	m.cachedToolsList = nil
 	m.upstreamInstructions = ""
 	m.cachedProxyConfig = nil
 	if clearPreferred {

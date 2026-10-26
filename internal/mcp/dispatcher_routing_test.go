@@ -17,7 +17,7 @@ import (
 )
 
 // 使用本地协议替身验证真实 Manager/Dispatcher 链路，不启动 UE。
-func routingInstance(t *testing.T, name string) (int, *atomic.Int32) {
+func routingInstance(t *testing.T, name string, toolNames ...string) (int, *atomic.Int32) {
 	t.Helper()
 	var calls atomic.Int32
 	upgrader := websocket.Upgrader{}
@@ -38,7 +38,25 @@ func routingInstance(t *testing.T, name string) (int, *atomic.Int32) {
 				return
 			}
 			result := map[string]interface{}{}
+			if request["method"] == "tools/list" && len(toolNames) > 0 {
+				tools := make([]interface{}, 0, len(toolNames))
+				for _, toolName := range toolNames {
+					tools = append(tools, map[string]interface{}{"name": toolName, "inputSchema": map[string]interface{}{"type": "object"}})
+				}
+				result["tools"] = tools
+			}
 			if request["method"] == "tools/call" {
+				if len(toolNames) > 0 {
+					params, _ := request["params"].(map[string]interface{})
+					found := false
+					for _, toolName := range toolNames {
+						found = found || params["name"] == toolName
+					}
+					if !found {
+						_ = conn.WriteJSON(map[string]interface{}{"jsonrpc": "2.0", "id": request["id"], "error": map[string]interface{}{"code": -32601, "message": "Tool not found"}})
+						continue
+					}
+				}
 				calls.Add(1)
 				text, _ := json.Marshal(map[string]string{"source": name})
 				result["content"] = []interface{}{map[string]interface{}{"type": "text", "text": string(text)}}
@@ -52,6 +70,60 @@ func routingInstance(t *testing.T, name string) (int, *atomic.Int32) {
 	endpoint, _ := url.Parse(server.URL)
 	port, _ = strconv.Atoi(endpoint.Port())
 	return port, &calls
+}
+
+func TestDispatcherRefreshesToolNamesAfterReconnect(t *testing.T) {
+	legacyNames := []string{"search_capabilities", "call_capability", "submit_feedback"}
+	modernNames := []string{"SearchCapabilities", "CallCapability", "SubmitFeedback"}
+	legacy, _ := routingInstance(t, "legacy", legacyNames...)
+	modern, calls := routingInstance(t, "modern", modernNames...)
+	manager := unreal.NewManager()
+	t.Cleanup(manager.Disconnect)
+	manager.ScanPortStart, manager.ScanPortEnd = modern, modern
+	dispatcher := NewDispatcher(manager, nil, "test")
+	dispatcher.state = stateRunning
+	list := func() map[string]bool {
+		t.Helper()
+		response, err := dispatcher.Dispatch(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
+		var rpc struct {
+			Result struct{ Tools []struct{ Name string } }
+		}
+		if err != nil || json.Unmarshal([]byte(response), &rpc) != nil {
+			t.Fatalf("tools/list: %s (%v)", response, err)
+		}
+		names := map[string]bool{}
+		for _, tool := range rpc.Result.Tools {
+			names[tool.Name] = true
+		}
+		return names
+	}
+	if !manager.ConnectTo(legacy, true) {
+		t.Fatal("connect legacy")
+	}
+	for _, name := range legacyNames {
+		if !list()[name] {
+			t.Fatalf("legacy tool missing: %s", name)
+		}
+	}
+	if !manager.ConnectTo(modern, true) {
+		t.Fatal("reconnect modern")
+	}
+	updated := list()
+	for index, name := range modernNames {
+		if !updated[name] || updated[legacyNames[index]] {
+			t.Fatalf("stale tool list after reconnect: %v", updated)
+		}
+		params := map[string]interface{}{"name": name, "arguments": map[string]interface{}{"Query": "", "Capability": "GetEditorInfo", "Arguments": map[string]interface{}{}}}
+		request, _ := json.Marshal(map[string]interface{}{"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": params})
+		response, err := dispatcher.Dispatch(string(request))
+		var rpc map[string]interface{}
+		if err != nil || json.Unmarshal([]byte(response), &rpc) != nil || rpc["error"] != nil {
+			t.Fatalf("new tool failed: %s (%v)", response, err)
+		}
+	}
+	if calls.Load() != 3 {
+		t.Fatalf("new tools must actually reach the new UE: calls=%d", calls.Load())
+	}
 }
 
 func TestDispatcherInstanceRouting(t *testing.T) {
