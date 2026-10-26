@@ -38,6 +38,10 @@ func routingInstance(t *testing.T, name string, toolNames ...string) (int, *atom
 				return
 			}
 			result := map[string]interface{}{}
+			if request["method"] == "auth" {
+				params, _ := request["params"].(map[string]interface{})
+				result["ok"] = params["token"] == "contract-test-token"
+			}
 			if request["method"] == "tools/list" && len(toolNames) > 0 {
 				tools := make([]interface{}, 0, len(toolNames))
 				for _, toolName := range toolNames {
@@ -60,6 +64,10 @@ func routingInstance(t *testing.T, name string, toolNames ...string) (int, *atom
 				calls.Add(1)
 				text, _ := json.Marshal(map[string]string{"source": name})
 				result["content"] = []interface{}{map[string]interface{}{"type": "text", "text": string(text)}}
+				if name == "failure" {
+					result["isError"] = true
+					result["structuredContent"] = map[string]interface{}{"ErrorKind": "ArgInvalid", "bRolledBack": false, "Error": "contract failure"}
+				}
 			}
 			if conn.WriteJSON(map[string]interface{}{"jsonrpc": "2.0", "id": request["id"], "result": result}) != nil {
 				return
@@ -70,6 +78,27 @@ func routingInstance(t *testing.T, name string, toolNames ...string) (int, *atom
 	endpoint, _ := url.Parse(server.URL)
 	port, _ = strconv.Atoi(endpoint.Port())
 	return port, &calls
+}
+
+func TestStructuredFailureIsForwardedOnce(t *testing.T) {
+	port, calls := routingInstance(t, "failure", "CallCapability")
+	manager := unreal.NewManager()
+	t.Cleanup(manager.Disconnect)
+	if !manager.ConnectTo(port, true) {
+		t.Fatal("connect mock UE")
+	}
+	dispatcher := NewDispatcher(manager, nil, "test")
+	dispatcher.state = stateRunning
+	response, err := dispatcher.Dispatch(`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"CallCapability","arguments":{"Capability":"ManageAssetDataTable","Arguments":{"AssetPath":"/synthetic/DT"}}}}`)
+	var rpc struct {
+		Result struct {
+			IsError           bool
+			StructuredContent map[string]interface{}
+		}
+	}
+	if err != nil || json.Unmarshal([]byte(response), &rpc) != nil || !rpc.Result.IsError || rpc.Result.StructuredContent["ErrorKind"] != "ArgInvalid" || calls.Load() != 1 {
+		t.Fatalf("structured failure must survive exactly one write: %s (%v), calls=%d", response, err, calls.Load())
+	}
 }
 
 func TestDispatcherRefreshesToolNamesAfterReconnect(t *testing.T) {
