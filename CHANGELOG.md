@@ -7,7 +7,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
-- 统一中英文首页的 Unreal Engine MCP 桌面客户端定位，突出 NexusLink 依赖，补充安装包、Fab 核心插件与文档入口。
+- 统一中英文首页的 Unreal Engine MCP 桌面客户端定位，突出 NexusLink 依赖，补充安装包、核心插件的 GitHub 地址与文档入口。
 
 ### Fixed
 

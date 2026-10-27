@@ -4,7 +4,7 @@
 
 **Connect AI clients to Unreal Engine without an IDE extension.** NexusDesktop is the standalone desktop client for [NexusLink — Unreal Engine MCP](https://github.com/bytepine/NexusLink), available for Windows and macOS. With NexusLink installed in UE, AI clients can read project context, edit assets, and debug running sessions.
 
-[Download for Windows / macOS](https://github.com/bytepine/NexusDesktop/releases) · [UE plugin on Fab (NexusMCP)](https://www.fab.com/listings/60097027-d7a5-4f73-87f3-81edb1b6ef0b) · [Download & install](#download--install) · [NexusLink documentation](https://github.com/bytepine/NexusLink/blob/master/docs/README.md)
+[Download for Windows / macOS](https://github.com/bytepine/NexusDesktop/releases) · [UE plugin (NexusLink)](https://github.com/bytepine/NexusLink) · [Download & install](#download--install) · [NexusLink documentation](https://github.com/bytepine/NexusLink/blob/master/docs/README.md)
 
 The app lives in the system tray (menu bar on macOS), discovers and switches between UE instances, generates AI client configuration, and provides a local MCP relay. Engine capabilities come from NexusLink; tool calls are forwarded over WebSocket.
 
