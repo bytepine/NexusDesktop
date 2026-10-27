@@ -172,7 +172,7 @@ UE 重新连接或切换实例后会重新读取 `tools/list`，不沿用上一�
 
 ## 本地构建
 
-提交前运行 `go vet ./...` 与 `go test ./...`，其中包含当前 PascalCase 契约和本地 HTTP/WebSocket 多实例转发、旧/新工具名重连刷新回归。无 CGO/OpenGL 的环境可用 `go vet -tags ci ./...` 与 `go test -tags ci ./...` 做无窗口检查；这不代替原生 GUI 构建。
+提交前运行 `go vet ./...` 与 `go test ./...`，其中包含当前 PascalCase 契约和本地 HTTP/WebSocket 多实例转发、旧/新工具名重连刷新、旧连接退出不影响当前连接的回归。无 CGO/OpenGL 的环境可用 `go vet -tags ci ./...` 与 `go test -tags ci ./...` 做无窗口检查；这不代替原生 GUI 构建。
 
 - Go 1.25+
 - GCC / MinGW-w64（Windows）或 Xcode CLI（macOS）— Fyne 需要 CGO

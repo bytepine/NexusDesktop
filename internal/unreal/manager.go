@@ -635,29 +635,28 @@ func (m *Manager) receiveLoop(conn *websocket.Conn, epoch int64) {
 	for {
 		_, data, err := conn.ReadMessage()
 		if err != nil {
-			// 检查是否为当前 epoch（防旧 socket 的 close 误清新连接）
-			if atomic.LoadInt64(&m.connectionEpoch) == epoch {
-				m.mu.Lock()
-				if m.ws == conn {
-					log.Warnf("WS 读取错误 host=%.80q port=%d epoch=%d pending=%d: %v，准备重扫", m.ConnectedHost, m.ConnectedPort, epoch, len(m.pendingRequests), err)
-				} else {
-					log.Debugf("WS 已主动关闭 epoch=%d: %v", epoch, err)
-				}
-				m.stopKeepalive()
-				m.ws = nil
-				prev := m.ConnectedPort
-				m.ConnectedPort = -1
-				m.ConnectedHost = LoopbackHost
-				m.connectedToolsListMode = "starter"
-				m.upstreamInstructions = ""
-				m.cachedProxyConfig = nil
-				m.releasePendingRequests()
+			// 与连接替换共用锁；旧 socket 退出不能清理新连接或触发重扫。
+			m.mu.Lock()
+			if atomic.LoadInt64(&m.connectionEpoch) != epoch || m.ws != conn {
 				m.mu.Unlock()
-				if prev > 0 && m.OnConnectionChanged != nil {
-					go m.OnConnectionChanged(-1)
-				}
-				go m.DiscoverInstances()
+				log.Debugf("WS 已主动关闭 epoch=%d: %v", epoch, err)
+				return
 			}
+			log.Warnf("WS 读取错误 host=%.80q port=%d epoch=%d pending=%d: %v，准备重扫", m.ConnectedHost, m.ConnectedPort, epoch, len(m.pendingRequests), err)
+			m.stopKeepalive()
+			m.ws = nil
+			prev := m.ConnectedPort
+			m.ConnectedPort = -1
+			m.ConnectedHost = LoopbackHost
+			m.connectedToolsListMode = "starter"
+			m.upstreamInstructions = ""
+			m.cachedProxyConfig = nil
+			m.releasePendingRequests()
+			m.mu.Unlock()
+			if prev > 0 && m.OnConnectionChanged != nil {
+				go m.OnConnectionChanged(-1)
+			}
+			go m.DiscoverInstances()
 			return
 		}
 		m.handleWsMessage(data)
