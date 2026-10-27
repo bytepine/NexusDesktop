@@ -9,6 +9,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - 统一中英文首页的 Unreal Engine MCP 桌面客户端定位，突出 NexusLink 依赖，补充安装包、核心插件的 GitHub 地址与文档入口。
 
+### Added
+
+- 编辑器长操作使用独立连接，支持按请求发送 MCP 进度与取消等待；隔离会话标识，跳过中间通知并匹配最终响应，禁用任务状态缓存和写入重试。
+
+
 ### Fixed
 
 - 修复中文标签及混合字体文字的垂直基线不一致，设置页签和同排文字保持对齐。

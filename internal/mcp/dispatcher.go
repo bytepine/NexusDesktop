@@ -50,6 +50,8 @@ type Dispatcher struct {
 	// onSessionReady 在 initialized 完成后调用（用于向 SSE 客户端推送 tools/list_changed）
 	onSessionReady func()
 
+	requests    sync.Map
+	sessionID   string
 	allowMu     sync.Mutex
 	alwaysAllow map[string]struct{} // 本 MCP 会话内「总是允许」的能力名
 }
@@ -60,12 +62,13 @@ func NewDispatcher(mgr *unreal.Manager, onReady func(), version string) *Dispatc
 		state:          stateWaitingForInitialize,
 		manager:        mgr,
 		version:        version,
+		sessionID:      newOperationSession(),
 		onSessionReady: onReady,
 	}
 }
 
 // Dispatch 处理一条 JSON-RPC 消息字符串，返回响应 JSON 或空串（通知类无需回复）。
-func (d *Dispatcher) Dispatch(body string) (string, error) {
+func (d *Dispatcher) dispatch(body string) (string, error) {
 	var msg map[string]interface{}
 	if err := json.Unmarshal([]byte(body), &msg); err != nil {
 		return makeError(nil, errParseError, "Parse error"), nil
@@ -227,7 +230,7 @@ func (d *Dispatcher) handleToolsCall(id interface{}, params map[string]interface
 	}
 	now := time.Now().UnixMilli()
 	callInfo = proxy.ParseCall(toolName, args, d.manager.CacheScope())
-	if hit := hub.LookupFresh(callInfo, now); hit != nil {
+	if hit := hub.LookupFresh(callInfo, now); hit != nil && !isEditorOperation(callInfo.Capability) {
 		return makeResult(id, proxy.WrapCached(hit.Result, hit.Kind, hit.SnapshotAt)), nil
 	}
 
@@ -249,7 +252,22 @@ func (d *Dispatcher) handleToolsCall(id interface{}, params map[string]interface
 
 	// 转发到 UE
 	var outcome unreal.WsRequestResult
-	if targetPort > 0 {
+	if isEditorOperation(callInfo.Capability) {
+		meta := cloneMapMap(forwardParams["_meta"])
+		meta["nexusSessionId"] = d.sessionID
+		forwardParams["_meta"] = meta
+		if targetPort <= 0 {
+			_ = d.manager.EnsureLongConnection()
+			targetPort, targetHost = d.manager.ConnectedAddress()
+		}
+		context, _ := d.requests.Load(operationRequestKey(id))
+		request, _ := context.(*operationRequest)
+		if request != nil {
+			outcome = d.manager.ForwardOperation(targetPort, forwardParams, request.progress, request.cancel, targetHost)
+		} else {
+			outcome = d.manager.ForwardOperation(targetPort, forwardParams, nil, nil, targetHost)
+		}
+	} else if targetPort > 0 {
 		outcome = d.manager.ForwardToolCallToPort(targetPort, forwardParams, targetHost)
 	} else {
 		_ = d.manager.EnsureLongConnection()
@@ -266,7 +284,7 @@ func (d *Dispatcher) handleToolsCall(id interface{}, params map[string]interface
 
 	switch outcome.Status {
 	case "disconnected":
-		if snap := hub.LookupDegraded(callInfo, now); snap != nil {
+		if snap := hub.LookupDegraded(callInfo, now); snap != nil && !isEditorOperation(callInfo.Capability) {
 			log.Warnf("UE 未连接，返回缓存快照 tool=%.80q capability=%.80q snapshot=%.80q", toolName, callInfo.Capability, snap.SnapshotAt)
 			return makeResult(id, proxy.WrapDegraded(snap.Result, snap.SnapshotAt)), nil
 		}
@@ -295,6 +313,9 @@ func (d *Dispatcher) handleToolsCall(id interface{}, params map[string]interface
 	if result, ok := resp["result"]; ok {
 		// 等待期间切换长连接时，响应不能污染另一个实例的缓存。
 		if targetPort <= 0 && callInfo.CacheScope != d.manager.CacheScope() {
+			return makeResult(id, result), nil
+		}
+		if isEditorOperation(callInfo.Capability) {
 			return makeResult(id, result), nil
 		}
 		return makeResult(id, hub.Store(callInfo, result, now)), nil

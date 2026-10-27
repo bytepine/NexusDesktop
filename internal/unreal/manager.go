@@ -851,6 +851,11 @@ func (m *Manager) sendProxyFeedbackEvent(event ProxyFeedbackEvent) WsRequestResu
 
 // ForwardToolCallToPort 通过一次性 WS 连接转发到指定端口（不改动长连接）。
 func (m *Manager) ForwardToolCallToPort(port int, params map[string]interface{}, hostOpt ...string) WsRequestResult {
+	return m.ForwardOperation(port, params, nil, nil, hostOpt...)
+}
+
+// ForwardOperation 使用独立连接承载可等待请求，通知与取消不占用长连接串行队列。
+func (m *Manager) ForwardOperation(port int, params map[string]interface{}, progress func(map[string]interface{}), cancelled <-chan struct{}, hostOpt ...string) WsRequestResult {
 	host := LoopbackHost
 	if len(hostOpt) > 0 && hostOpt[0] != "" {
 		host = NormalizeHost(hostOpt[0])
@@ -900,18 +905,40 @@ func (m *Manager) ForwardToolCallToPort(port int, params map[string]interface{},
 		log.Warnf("UE 一次性转发失败 stage=send host=%.80q port=%d id=%d: %v", host, port, id, err)
 		return WsRequestResult{Status: "disconnected"}
 	}
+	done := make(chan struct{})
+	defer close(done)
+	if cancelled != nil {
+		go func() {
+			select {
+			case <-cancelled:
+				_ = conn.WriteJSON(map[string]interface{}{"jsonrpc": "2.0", "method": "notifications/cancelled", "params": map[string]interface{}{"requestId": id, "_meta": params["_meta"]}})
+			case <-done:
+			}
+		}()
+	}
 	_ = conn.SetReadDeadline(time.Now().Add(toolsCallTimeoutMs))
-	_, data, err := conn.ReadMessage()
-	if err != nil {
-		log.Warnf("UE 一次性转发失败 stage=read host=%.80q port=%d id=%d timeout_ms=%d: %v", host, port, id, toolsCallTimeoutMs.Milliseconds(), err)
-		return WsRequestResult{Status: "timeout"}
+	for {
+		_, data, readErr := conn.ReadMessage()
+		if readErr != nil {
+			return WsRequestResult{Status: "timeout"}
+		}
+		var response map[string]interface{}
+		if json.Unmarshal(data, &response) != nil {
+			continue
+		}
+		if response["method"] == "notifications/progress" {
+			if progress != nil {
+				progress(response)
+			}
+			continue
+		}
+		responseID, ok := response["id"].(float64)
+		if !ok || int64(responseID) != id {
+			continue
+		}
+		return WsRequestResult{Status: "ok", Response: response}
 	}
-	var resp map[string]interface{}
-	if err := json.Unmarshal(data, &resp); err != nil {
-		log.Warnf("UE 一次性转发失败 stage=decode host=%.80q port=%d id=%d bytes=%d: %v", host, port, id, len(data), err)
-		return WsRequestResult{Status: "disconnected"}
-	}
-	return WsRequestResult{Status: "ok", Response: resp}
+
 }
 
 // FetchUpstreamInstructions 获取 UE 端 nexus/instructions（有缓存直接返回）。
@@ -1084,4 +1111,11 @@ func instancesEqual(a, b []InstanceInfo) bool {
 		}
 	}
 	return true
+}
+
+// ConnectedAddress 返回同一时刻的宿主与端口，供独立操作连接使用。
+func (m *Manager) ConnectedAddress() (int, string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.ConnectedPort, m.ConnectedHost
 }

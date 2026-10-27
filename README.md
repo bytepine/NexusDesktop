@@ -8,6 +8,8 @@
 
 程序常驻系统托盘（macOS 菜单栏），提供 UE 实例发现与切换、AI 客户端配置生成和本地 MCP 中转；引擎能力由 NexusLink 提供，经 WebSocket 转发工具调用。
 
+编辑器长操作支持按会话查询、等待期间的 MCP 进度及取消等待；底层测试停止须显式请求，Live Coding 不承诺取消。任务状态不缓存，写操作断线不重试。
+
 四端端口与开关层数见 [NexusLink 使用指南](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.md)。本程序是 **两层** 开关中的客户端层（UE 启用 MCP + 托盘启用中转）。本机不要与 Rider / VSCode 代理同时开。
 
 ---

@@ -353,7 +353,23 @@ func (s *Server) handlePost(w http.ResponseWriter, r *http.Request) {
 	} else if parsed["method"] == "tools/call" {
 		log.Infof("MCP 请求开始 session=%s %s", sessionLogID(sessionID), fields)
 	}
-	resp, _ := session.dispatcher.Dispatch(body)
+	streamed := false
+	w.Header().Set(mcpSessionHeader, sessionID)
+	resp, _ := session.dispatcher.DispatchWithProgress(body, func(event map[string]interface{}) {
+		if !strings.Contains(r.Header.Get("Accept"), "text/event-stream") {
+			return
+		}
+		if !streamed {
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.WriteHeader(http.StatusOK)
+			streamed = true
+		}
+		data, _ := json.Marshal(event)
+		_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+	})
 	// 只记录结果类型与错误码，不把参数、响应正文或错误正文写入日志。
 	var result struct {
 		Error *struct {
@@ -369,6 +385,10 @@ func (s *Server) handlePost(w http.ResponseWriter, r *http.Request) {
 		log.Warnf("MCP 工具失败 session=%s %s isError=true elapsed_ms=%d", sessionLogID(sessionID), fields, time.Since(started).Milliseconds())
 	} else if isInit || parsed["method"] == "notifications/initialized" || parsed["method"] == "tools/list" || parsed["method"] == "tools/call" {
 		log.Infof("MCP 请求完成 session=%s %s elapsed_ms=%d", sessionLogID(sessionID), fields, time.Since(started).Milliseconds())
+	}
+	if streamed {
+		_, _ = fmt.Fprintf(w, "data: %s\n\n", resp)
+		return
 	}
 	w.Header().Set(mcpSessionHeader, sessionID)
 	if resp == "" {
