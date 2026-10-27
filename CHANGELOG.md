@@ -5,6 +5,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- 统一中英文首页的 Unreal Engine MCP 桌面客户端定位，突出 NexusLink 依赖，补充安装包、Fab 核心插件与文档入口。
+
 ### Fixed
 
 - 修复中文标签及混合字体文字的垂直基线不一致，设置页签和同排文字保持对齐。

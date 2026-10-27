@@ -1,8 +1,12 @@
-# NexusDesktop
+# NexusDesktop — Unreal Engine MCP 桌面客户端
 
 **Language / 语言**: 简体中文 · [English](README.en.md)
 
-独立的本地 MCP **中转程序**：无需 IDE 插件，双击运行后在系统托盘（macOS 菜单栏）常驻，发现本机 Unreal Engine 实例并经 WebSocket 转发工具调用。能力由 UE 里的 **NexusLink** 提供。
+**无需 IDE 扩展，连接 AI 与 Unreal Engine。** NexusDesktop 是 [NexusLink — Unreal Engine MCP](https://github.com/bytepine/NexusLink) 的独立桌面客户端，支持 Windows 和 macOS。配合 UE 侧 NexusLink，可让 AI 读取项目、编辑资产和调试运行状态。
+
+[下载 Windows / macOS 安装包](https://github.com/bytepine/NexusDesktop/releases) · [UE 插件（Fab：NexusMCP）](https://www.fab.com/listings/60097027-d7a5-4f73-87f3-81edb1b6ef0b) · [下载与安装](#下载与安装) · [NexusLink 文档](https://github.com/bytepine/NexusLink/blob/master/docs/README.md)
+
+程序常驻系统托盘（macOS 菜单栏），提供 UE 实例发现与切换、AI 客户端配置生成和本地 MCP 中转；引擎能力由 NexusLink 提供，经 WebSocket 转发工具调用。
 
 四端端口与开关层数见 [NexusLink 使用指南](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.md)。本程序是 **两层** 开关中的客户端层（UE 启用 MCP + 托盘启用中转）。本机不要与 Rider / VSCode 代理同时开。
 
