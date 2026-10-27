@@ -66,9 +66,17 @@ Install and enable NexusLink, then check **Enable MCP Server** ([usage-guide §2
 
 ### 2. Launch
 
+Editor / PIE sessions use **Edit → Editor Preferences → Plugins → NexusLink → Enable MCP Server**. Standalone Development / DebugGame Game / DS processes do not inherit that switch: append `-EnableNexusMcp` to their existing launch arguments. Shipping builds do not support MCP.
+
 **Windows**: after Setup, start from the Start menu; the app enters the tray.
 
 **macOS**: open the dmg, drag `NexusDesktop.app` into `Applications`, then launch. It does **not** appear in the Dock — menu bar only.
+
+Open the tray menu, enable the relay server (off for new installs), and verify that the status line shows the intended UE project. Use **Select UE instance** to switch processes or **Scan UE instances** if the target is missing.
+
+![NexusDesktop relay switch and client configuration entry (Chinese UI)](docs/images/desktop-relay-tray.png)
+
+Screenshots illustrate UI locations. Version numbers and legacy tool names are examples; use the tool list returned by your current connection.
 
 | Tray item | Notes |
 |-----------|-------|
@@ -93,7 +101,11 @@ Released 2.x and current tool-call formats are supported without rewriting reque
 
 ### 3. AI client
 
-**Cursor** (`~/.cursor/mcp.json`). Copy the token from the tray **Copy auth token** or Settings. Multiple tokens: `Bearer <tok1>, <tok2>`. If **Require MCP auth** is off, omit `headers`. See [usage-guide §1.1](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.md#11-身份验证).
+Choose **MCP client config…** in the tray, select **Streamable HTTP** and Cursor / CodeBuddy, then copy the generated configuration. Use the URL and token from that window; the port may advance if the default is occupied.
+
+![Generated MCP client configuration with the token redacted (Chinese UI)](docs/images/desktop-client-config.png)
+
+**Cursor**: merge the generated server entry into `mcpServers` in `~/.cursor/mcp.json` (`%USERPROFILE%\.cursor\mcp.json` on Windows), keeping existing servers. The complete structure is shown below. You can also copy the token from the tray **Copy auth token** or Settings. Multiple tokens: `Bearer <tok1>, <tok2>`. See [usage-guide §1.1](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.md#11-身份验证).
 
 ```json
 {
@@ -107,6 +119,18 @@ Released 2.x and current tool-call formats are supported without rewriting reque
   }
 }
 ```
+
+**CodeBuddy / Windsurf**: paste the generated server entry into the client's custom MCP configuration. Its Streamable HTTP entry includes `"transportType": "streamable-http"`.
+
+> Replace `<token>` with the copied value. Treat it as a credential: do not commit real tokens or expose them in documentation, chats, or screenshots.
+
+#### Verify the connection
+
+1. Restart the MCP session or reopen the AI panel and check that the server is connected
+2. UE's default SearchMode provides `SearchCapabilities`, `CallCapability`, and `SubmitFeedback`. The relay adds `list_unreal_instances` and `connect_unreal_instance`, usually making 5 tools. If only the two instance tools appear initially, discover and connect to UE, then refresh the list. Older UE plugin versions use snake_case names; follow the actual tool list
+3. Ask the AI to **use MCP to report the current UE editor information** and check the returned project, engine version, and runtime state
+
+See the [illustrated setup and daily-use examples](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.md#3-nexusdesktop) in the NexusLink usage guide (Chinese).
 
 ### 4. Settings window
 

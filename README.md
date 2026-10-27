@@ -64,11 +64,19 @@
 
 安装并启用 NexusLink，勾选 **启用 MCP 服务器**（步骤见 [usage-guide §2](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.md)）。
 
+编辑器 / PIE 使用 **Edit → Editor Preferences → Plugins → NexusLink** 开关；Development / DebugGame 独立 Game / DS 不继承该勾选，须在原启动参数末尾追加 `-EnableNexusMcp`。Shipping 不支持 MCP。
+
 ### 2. 启动
 
 **Windows**：Setup 后从开始菜单启动，进入系统托盘。
 
 **macOS**：打开 dmg，将 `NexusDesktop.app` 拖入 `Applications` 后启动。不出现在 Dock，仅菜单栏常驻。
+
+右键托盘图标，勾选 **启用中转服务器**（新安装默认关闭），确认状态行显示目标 UE 工程。多进程时通过 **选择 UE 实例** 切换；没有出现时先执行 **扫描 UE 实例**。
+
+![托盘中的启用中转服务器与 MCP 客户端配置入口](docs/images/desktop-relay-tray.png)
+
+配图用于说明界面位置，截图中的版本号和旧版工具名仅为示例；以当前安装版本及连接返回的工具清单为准。
 
 | 托盘菜单 | 说明 |
 |----------|------|
@@ -93,7 +101,11 @@
 
 ### 3. AI 客户端
 
-**Cursor**（`~/.cursor/mcp.json`）。Token 用托盘「复制身份验证 Token」或设置面板。可写多个：`Bearer <tok1>, <tok2>`。关闭「启用 MCP 身份验证」时可不带 `headers`。规则见 [usage-guide §1.1](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.md#11-身份验证)。
+推荐从托盘 **MCP 客户端配置…** 选择 **Streamable HTTP** 和 Cursor / CodeBuddy，再复制自动生成的配置。URL 和 Token 使用该窗口给出的值；端口冲突时以实际端口为准。
+
+![MCP 客户端配置窗口，Token 已打码](docs/images/desktop-client-config.png)
+
+**Cursor**：把生成的服务器条目合并进 `~/.cursor/mcp.json` 的 `mcpServers`（Windows 为 `%USERPROFILE%\.cursor\mcp.json`），保留其他服务器。完整结构如下。Token 也可从托盘「复制身份验证 Token」或设置面板取得，可写多个：`Bearer <tok1>, <tok2>`。规则见 [usage-guide §1.1](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.md#11-身份验证)。
 
 ```json
 {
@@ -107,6 +119,18 @@
   }
 }
 ```
+
+**CodeBuddy / Windsurf**：选择对应客户端后，将生成的条目粘贴到自定义 MCP 配置中；Streamable HTTP 条目包含 `"transportType": "streamable-http"`。
+
+> Token 是访问凭证。配置示例中的 `<token>` 须替换为实际值；不要把真实 Token 提交到仓库或暴露在文档、聊天及截图中。
+
+#### 验证连接
+
+1. 重启 MCP 会话或重新打开 AI 面板，确认服务器已连接
+2. UE 默认 SearchMode 提供 `SearchCapabilities`、`CallCapability`、`SubmitFeedback` 3 个元工具；加上中转的 `list_unreal_instances`、`connect_unreal_instance`，通常共 5 个。首次只见两个实例工具时，先发现并连接 UE，再刷新清单。旧版 UE 使用 snake_case 命名，以实际清单为准
+3. 输入 **「使用 MCP 告诉我当前 UE 编辑器信息。」**，核对返回的工程、引擎版本和运行状态
+
+完整的 [图文接入与日常使用示例](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.md#3-nexusdesktop) 见 NexusLink 使用指南。
 
 ### 4. 设置窗口
 
