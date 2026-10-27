@@ -136,7 +136,7 @@ See the [illustrated setup and daily-use examples](https://github.com/bytepine/N
 
 ### 4. Settings window
 
-Open **Settings…** from the tray. Windows can be resized; Save, Close and status feedback stay at the bottom. Changes, including language, take effect together on Save. Closing hides the window and discards unsaved changes; the app keeps running.
+Open **Settings…** from the tray. Chinese and mixed-font text use consistent vertical baselines. Windows can be resized; Save, Close and status feedback stay at the bottom. Changes, including language, take effect together on Save. Closing hides the window and discards unsaved changes; the app keeps running.
 
 Settings are grouped into **General**, **Connection** and **Security**. Scan options, remote UE and additional tokens are collapsed by default; scan and switch instances from the tray. Machine and additional tokens are masked, and extra rows are added on demand. The client configuration window uses the same bottom action area with copy feedback; placement instructions are kept outside the copied fragment.
 

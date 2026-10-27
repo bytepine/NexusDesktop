@@ -5,6 +5,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- 修复中文标签及混合字体文字的垂直基线不一致，设置页签和同排文字保持对齐。
+
 ## [2.3.0] - 2026-10-27
 
 ### Added
