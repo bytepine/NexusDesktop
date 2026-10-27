@@ -193,6 +193,14 @@ python3 scripts/build_desktop.py --build-type develop
 
 Or `./build.command`.
 
+**Linux (Ubuntu / Debian)**: Fyne builds both X11 and Wayland by default. Install the native build dependencies first.
+
+```bash
+sudo apt-get install -y build-essential libgl1-mesa-dev xorg-dev libxkbcommon-dev libwayland-dev
+go vet ./...
+go test ./...
+```
+
 Record product changes in [CHANGELOG.md](CHANGELOG.md) `[Unreleased]`. Tag prefix: `nexus-desktop-v`.
 
 ---

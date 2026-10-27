@@ -8,6 +8,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Fixed
 
 - 修复中文标签及混合字体文字的垂直基线不一致，设置页签和同排文字保持对齐。
+- 补齐 Linux CI 的 Wayland 开发依赖，修复 Fyne 升级后原生检查缺少头文件的问题。
 
 ## [2.3.0] - 2026-10-27
 

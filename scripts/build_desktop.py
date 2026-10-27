@@ -28,7 +28,7 @@ build_desktop.py — NexusDesktop 跨平台构建脚本
               release 安装包另需 Inno Setup 7（ISCC.exe）；CI 会自动安装。
               本机：https://jrsoftware.org/isdl.php 或 winget install JRSoftware.InnoSetup.7
     macOS   : Xcode Command Line Tools（xcode-select --install）
-    Linux   : build-essential（sudo apt install build-essential）
+    Linux   : sudo apt install build-essential libgl1-mesa-dev xorg-dev libxkbcommon-dev libwayland-dev
 """
 
 from __future__ import annotations

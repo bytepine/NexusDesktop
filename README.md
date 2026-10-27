@@ -195,6 +195,14 @@ python3 scripts/build_desktop.py --build-type develop
 
 或 `./build.command`。
 
+**Linux（Ubuntu / Debian）**：Fyne 默认同时编译 X11 和 Wayland，先安装原生构建依赖。
+
+```bash
+sudo apt-get install -y build-essential libgl1-mesa-dev xorg-dev libxkbcommon-dev libwayland-dev
+go vet ./...
+go test ./...
+```
+
 功能变更写入 [CHANGELOG.md](CHANGELOG.md) `[Unreleased]`。tag 前缀：`nexus-desktop-v`。
 
 ---
