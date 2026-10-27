@@ -191,13 +191,11 @@ func (tc *TrayController) rebuildMenu() {
 	for _, inst := range instances {
 		inst := inst // 捕获
 		label := fmt.Sprintf("%s %s:%d [%s]", inst.ProjectName, inst.Host, inst.Port, inst.NetRole)
-		if tc.manager.IsConnectedInfo(inst) && wsOpen {
-			label = "✓ " + label
-		}
 		item := fyne.NewMenuItem(label, func() {
 			tc.manager.ConnectTo(inst.Port, true, inst.Host)
 			tc.Refresh()
 		})
+		item.Checked = tc.manager.IsConnectedInfo(inst) && wsOpen
 		instanceItems = append(instanceItems, item)
 	}
 	if len(instanceItems) == 0 {
@@ -209,11 +207,7 @@ func (tc *TrayController) rebuildMenu() {
 	instancesMenu.ChildMenu = fyne.NewMenu("", instanceItems...)
 
 	// 「启用中转服务器」开关
-	serverToggleLabel := i18n.T("tray.enable_proxy")
-	if cfg.Enabled {
-		serverToggleLabel = "✓ " + serverToggleLabel
-	}
-	serverToggle := fyne.NewMenuItem(serverToggleLabel, func() {
+	serverToggle := fyne.NewMenuItem(i18n.T("tray.enable_proxy"), func() {
 		newEnabled := !cfg.Enabled
 		newCfg := cfg
 		newCfg.Enabled = newEnabled
@@ -225,6 +219,8 @@ func (tc *TrayController) rebuildMenu() {
 		}
 		tc.Refresh()
 	})
+
+	serverToggle.Checked = cfg.Enabled
 
 	// 「MCP 客户端配置」—— 打开配置展示窗口，参考 NexusRider 设置面板
 	copyConfig := fyne.NewMenuItem(i18n.T("tray.mcp_config"), func() {
@@ -248,17 +244,15 @@ func (tc *TrayController) rebuildMenu() {
 	})
 
 	// 「开机自启」开关
-	autostartLabel := i18n.T("tray.autostart")
-	if IsAutostartEnabled() {
-		autostartLabel = "✓ " + autostartLabel
-	}
-	autostartItem := fyne.NewMenuItem(autostartLabel, func() {
+	autostartItem := fyne.NewMenuItem(i18n.T("tray.autostart"), func() {
 		enable := !IsAutostartEnabled()
 		if err := SetAutostart(enable); err != nil {
 			log.Errorf("设置开机自启失败: %v", err)
 		}
 		tc.Refresh()
 	})
+
+	autostartItem.Checked = IsAutostartEnabled()
 
 	// 「断开连接」
 	disconnectItem := fyne.NewMenuItem(i18n.T("tray.disconnect"), func() {
@@ -380,9 +374,6 @@ func (tc *TrayController) ApplyLanguage() {
 	}
 	fyne.Do(func() {
 		tc.rebuildMenu()
-		if tc.settings != nil {
-			tc.settings.buildContent()
-		}
 		if tc.configWin != nil {
 			tc.configWin.retranslate()
 		}
@@ -412,12 +403,13 @@ func (tc *TrayController) PromptGate(info proxy.CallInfo) proxy.GateDecision {
 		w := tc.app.NewWindow(i18n.T("gate.title"))
 		// 点按钮会先 reply 再 Close；关窗按钮只走 OnClosed，视为拒绝。
 		w.SetOnClosed(func() { reply(proxy.DecisionDeny) })
-		msg := widget.NewLabel(i18n.T("gate.message", info.Capability, suffix))
+		msg := wrappedLabel(i18n.T("gate.message", info.Capability, suffix))
 		allow := widget.NewButton(i18n.T("gate.allow"), func() { reply(proxy.DecisionAllow); w.Close() })
 		deny := widget.NewButton(i18n.T("gate.deny"), func() { reply(proxy.DecisionDeny); w.Close() })
 		always := widget.NewButton(i18n.T("gate.always"), func() { reply(proxy.DecisionAlways); w.Close() })
-		w.SetContent(container.NewVBox(msg, container.NewHBox(allow, deny, always)))
-		w.Resize(fyne.NewSize(480, 140))
+		deny.Importance = widget.HighImportance
+		w.SetContent(windowContent(nil, container.NewVScroll(container.NewVBox(msg)), nil, always, allow, deny))
+		w.Resize(fyne.NewSize(560, 220))
 		w.Show()
 	})
 	return <-ch

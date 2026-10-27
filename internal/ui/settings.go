@@ -8,7 +8,6 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/bytepine/NexusDesktop/internal/config"
@@ -24,17 +23,18 @@ type SettingsWindow struct {
 	win     fyne.Window
 	manager *unreal.Manager
 	tray    *TrayController // 保存后回调 Refresh
+	visible bool
+	status  *widget.Label
 }
 
 // NewSettingsWindow 创建设置窗口（初始隐藏）。
 func NewSettingsWindow(app fyne.App, mgr *unreal.Manager) *SettingsWindow {
 	sw := &SettingsWindow{manager: mgr}
 	w := app.NewWindow(i18n.T("settings.title"))
-	w.Resize(fyne.NewSize(520, 680))
-	w.SetFixedSize(true)
+	w.Resize(fyne.NewSize(640, 560))
 	// 关闭按钮仅隐藏，不退出
 	w.SetCloseIntercept(func() {
-		w.Hide()
+		sw.hide()
 	})
 	sw.win = w
 	sw.buildContent()
@@ -48,9 +48,17 @@ func (sw *SettingsWindow) SetTray(tc *TrayController) {
 
 // Show 显示设置窗口（若已显示则置前）。
 func (sw *SettingsWindow) Show() {
-	sw.buildContent() // 刷新内容再显示
+	if !sw.visible {
+		sw.buildContent()
+	}
+	sw.visible = true
 	sw.win.Show()
 	sw.win.RequestFocus()
+}
+
+func (sw *SettingsWindow) hide() {
+	sw.visible = false
+	sw.win.Hide()
 }
 
 func (sw *SettingsWindow) buildContent() {
@@ -69,9 +77,10 @@ func (sw *SettingsWindow) buildContent() {
 
 	extraTokensBox, collectExtraTokens := newExtraTokenList(cfg.ExtraAuthTokens)
 
-	statusLabel := widget.NewLabel("")
+	statusLabel := wrappedLabel("")
+	sw.status = statusLabel
 
-	tokenEntry := widget.NewEntry()
+	tokenEntry := widget.NewPasswordEntry()
 	tokenEntry.SetText(cfg.ProxyToken)
 	tokenEntry.Disable()
 	copyTokenBtn := widget.NewButton(i18n.T("settings.copy_token"), func() {
@@ -86,6 +95,7 @@ func (sw *SettingsWindow) buildContent() {
 	remoteEntry.SetText(formatRemoteLines(cfg.RemoteUnreal))
 	remoteEntry.SetPlaceHolder(i18n.T("settings.remote_placeholder"))
 	remoteEntry.Wrapping = fyne.TextWrapOff
+	remoteEntry.SetMinRowsVisible(3)
 
 	// ---- 端口设置 ----
 	httpPortEntry := widget.NewEntry()
@@ -130,95 +140,51 @@ func (sw *SettingsWindow) buildContent() {
 		channelSelect.SetSelected(channelOpts[0])
 	}
 
-	// ---- 界面语言：立即生效并落盘 ----
+	// ---- 界面语言与其他字段一起保存，避免切换时丢失草稿 ----
 	langOpts := i18n.SelectOptions()
 	langSelect := widget.NewSelect(langOpts, nil)
 	idx := i18n.SelectIndex(cfg.Language)
 	if idx >= 0 && idx < len(langOpts) {
 		langSelect.SetSelected(langOpts[idx])
 	}
-	langSelect.OnChanged = func(label string) {
-		newCfg := config.Get()
-		newCfg.Language = i18n.PrefFromSelect(label)
-		if err := config.Save(newCfg); err != nil {
-			log.Errorf("保存语言失败: %v", err)
-			return
+	var tabs *container.AppTabs
+	var connectionOptions *widget.Accordion
+	showFieldError := func(entry *widget.Entry, message string) {
+		tabs.SelectIndex(1)
+		if entry != httpPortEntry {
+			connectionOptions.Open(0)
 		}
-		i18n.Apply(newCfg.Language)
-		if sw.tray != nil {
-			sw.tray.ApplyLanguage()
-		} else {
-			sw.buildContent()
-		}
+		statusLabel.SetText(message)
+		sw.win.Canvas().Focus(entry)
 	}
-
-	// ---- 已发现实例列表 ----
-	snap := sw.manager.Snapshot()
-	instances := snap.Instances
-	wsOpen := snap.WsOpen
-
-	instanceRows := []fyne.CanvasObject{
-		widget.NewLabelWithStyle(i18n.T("settings.instances"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
-	}
-	if len(instances) == 0 {
-		instanceRows = append(instanceRows, widget.NewLabel(i18n.T("tray.no_instances")))
-	}
-	for _, inst := range instances {
-		inst := inst
-		label := fmt.Sprintf("%s  %s:%d  [%s]", inst.ProjectName, inst.Host, inst.Port, inst.NetRole)
-		var btn *widget.Button
-		if sw.manager.IsConnectedInfo(inst) && wsOpen {
-			btn = widget.NewButton("✓ "+label, nil)
-			btn.Importance = widget.HighImportance
-		} else {
-			btn = widget.NewButton(label, func() {
-				sw.manager.ConnectTo(inst.Port, true, inst.Host)
-				if sw.tray != nil {
-					sw.tray.Refresh()
-				}
-				sw.buildContent()
-				sw.win.Content().Refresh()
-			})
-		}
-		instanceRows = append(instanceRows, btn)
-	}
-	refreshBtn := widget.NewButton(i18n.T("settings.refresh"), func() {
-		sw.manager.DiscoverInstances()
-		sw.buildContent()
-		sw.win.Content().Refresh()
-		if sw.tray != nil {
-			sw.tray.Refresh()
-		}
-	})
-	instanceRows = append(instanceRows, refreshBtn)
-
 	saveBtn := widget.NewButton(i18n.T("settings.save"), func() {
 		httpPort, err := config.ParsePortField(httpPortEntry.Text)
 		if err != nil {
-			statusLabel.SetText(i18n.T("settings.invalid_port"))
+			showFieldError(httpPortEntry, i18n.T("settings.invalid_port"))
 			return
 		}
 		scanStart, err := config.ParsePortField(scanStartEntry.Text)
 		if err != nil {
-			statusLabel.SetText(i18n.T("settings.invalid_port"))
+			showFieldError(scanStartEntry, i18n.T("settings.invalid_port"))
 			return
 		}
 		scanEnd, err := config.ParsePortField(scanEndEntry.Text)
 		if err != nil {
-			statusLabel.SetText(i18n.T("settings.invalid_port"))
+			showFieldError(scanEndEntry, i18n.T("settings.invalid_port"))
 			return
 		}
 		if err := config.ValidateScanRange(scanStart, scanEnd); err != nil {
-			statusLabel.SetText(i18n.T("settings.scan_span_too_wide", config.MaxScanPortSpan))
+			showFieldError(scanEndEntry, i18n.T("settings.scan_span_too_wide", config.MaxScanPortSpan))
 			return
 		}
 		interval, err := config.ParseScanIntervalField(scanIntervalEntry.Text)
 		if err != nil {
-			statusLabel.SetText(i18n.T("settings.invalid_interval"))
+			showFieldError(scanIntervalEntry, i18n.T("settings.invalid_interval"))
 			return
 		}
 
 		newCfg := config.Get()
+		newCfg.Language = i18n.PrefFromSelect(langSelect.Selected)
 		newCfg.Enabled = enabledCheck.Checked
 		newCfg.ListenLan = listenLanCheck.Checked
 		newCfg.RequireAuth = requireAuthCheck.Checked
@@ -252,7 +218,7 @@ func (sw *SettingsWindow) buildContent() {
 		}
 		confirmRemote := func() {
 			if enteredRemote {
-				dialog.ShowConfirm(
+				showConfirmation(
 					i18n.T("settings.remote_plain_warn_title"),
 					i18n.T("settings.remote_plain_warn"),
 					func(ok bool) {
@@ -267,7 +233,7 @@ func (sw *SettingsWindow) buildContent() {
 			apply()
 		}
 		if enteredDanger {
-			dialog.ShowConfirm(
+			showConfirmation(
 				i18n.T("settings.lan_auth_warn_title"),
 				i18n.T("settings.lan_auth_warn"),
 				func(ok bool) {
@@ -284,59 +250,70 @@ func (sw *SettingsWindow) buildContent() {
 	saveBtn.Importance = widget.HighImportance
 
 	cancelBtn := widget.NewButton(i18n.T("settings.close"), func() {
-		sw.win.Hide()
+		sw.hide()
 	})
 
-	form := container.NewVBox(
-		widget.NewLabelWithStyle(i18n.T("settings.server_section"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+	general := container.NewVBox(
 		enabledCheck,
-		listenLanCheck,
-		requireAuthCheck,
-		widget.NewLabel(i18n.T("settings.extra_tokens")),
-		extraTokensBox,
-		container.NewBorder(nil, nil, widget.NewLabel(i18n.T("settings.auth_token")), copyTokenBtn, tokenEntry),
-		container.NewGridWithColumns(2,
-			widget.NewLabel(i18n.T("settings.http_port")),
-			httpPortEntry,
-			widget.NewLabel(i18n.T("settings.scan_start")),
-			scanStartEntry,
-			widget.NewLabel(i18n.T("settings.scan_end")),
-			scanEndEntry,
-			widget.NewLabel(i18n.T("settings.scan_interval")),
-			scanIntervalEntry,
-			widget.NewLabel(i18n.T("settings.write_gate")),
-			gateSelect,
-			widget.NewLabel(i18n.T("settings.update_channel")),
-			channelSelect,
-			widget.NewLabel(i18n.T("settings.language")),
-			langSelect,
+		widget.NewForm(
+			widget.NewFormItem(i18n.T("settings.language"), langSelect),
+			widget.NewFormItem(i18n.T("settings.update_channel"), channelSelect),
 		),
-		widget.NewLabel(i18n.T("settings.remote_unreal")),
-		remoteEntry,
-		widget.NewSeparator(),
+		wrappedLabel(i18n.T("settings.save_hint")),
 	)
-	for _, row := range instanceRows {
-		form.Add(row)
-	}
-	form.Add(widget.NewSeparator())
-	form.Add(container.NewHBox(saveBtn, cancelBtn))
-	form.Add(statusLabel)
-
-	sw.win.SetContent(container.NewScroll(form))
+	scan := widget.NewForm(
+		widget.NewFormItem(i18n.T("settings.scan_start"), scanStartEntry),
+		widget.NewFormItem(i18n.T("settings.scan_end"), scanEndEntry),
+		widget.NewFormItem(i18n.T("settings.scan_interval"), scanIntervalEntry),
+	)
+	connectionOptions = widget.NewAccordion(
+		widget.NewAccordionItem(i18n.T("settings.scan_section"), scan),
+		widget.NewAccordionItem(i18n.T("settings.remote_section"), container.NewVBox(
+			wrappedLabel(i18n.T("settings.remote_unreal")), remoteEntry)),
+	)
+	connection := container.NewVBox(
+		widget.NewForm(widget.NewFormItem(i18n.T("settings.http_port"), httpPortEntry)),
+		listenLanCheck,
+		wrappedLabel(i18n.T("settings.instances_hint")),
+		connectionOptions,
+	)
+	security := container.NewVBox(
+		requireAuthCheck,
+		widget.NewForm(
+			widget.NewFormItem(i18n.T("settings.write_gate"), gateSelect),
+			widget.NewFormItem(i18n.T("settings.auth_token"), container.NewBorder(nil, nil, nil, copyTokenBtn, tokenEntry)),
+		),
+		widget.NewAccordion(widget.NewAccordionItem(i18n.T("settings.extra_tokens"), extraTokensBox)),
+	)
+	tabs = container.NewAppTabs(
+		container.NewTabItem(i18n.T("settings.general"), container.NewVScroll(container.NewPadded(general))),
+		container.NewTabItem(i18n.T("settings.connection"), container.NewVScroll(container.NewPadded(connection))),
+		container.NewTabItem(i18n.T("settings.security"), container.NewVScroll(container.NewPadded(security))),
+	)
+	sw.win.SetContent(windowContent(nil, tabs, statusLabel, cancelBtn, saveBtn))
 }
 
 func (sw *SettingsWindow) applySavedConfig(newCfg config.Config, statusLabel *widget.Label) {
+	languageChanged := config.Get().Language != newCfg.Language
 	if err := config.Save(newCfg); err != nil {
 		statusLabel.SetText(i18n.T("settings.save_failed", err.Error()))
 		log.Errorf("设置保存失败: %v", err)
 		return
+	}
+	if languageChanged {
+		i18n.Apply(newCfg.Language)
+		sw.buildContent()
+		statusLabel = sw.status
+		if sw.tray != nil {
+			sw.tray.ApplyLanguage()
+		}
 	}
 	scanMin, scanMax := newCfg.ScanPortStart, newCfg.ScanPortEnd
 	if scanMin > scanMax {
 		scanMin, scanMax = scanMax, scanMin
 	}
 	if newCfg.HTTPPort >= scanMin && newCfg.HTTPPort <= scanMax {
-		msg := fmt.Sprintf("MCP 端口 %d 与 UE 扫描区间 [%d, %d] 重叠，可能导致代理端口被误当 UE 实例探测",
+		msg := i18n.T("settings.port_overlap",
 			newCfg.HTTPPort, scanMin, scanMax)
 		statusLabel.SetText(msg)
 		log.Warn(msg)
@@ -372,12 +349,9 @@ func parseRemoteLines(text string) []config.RemoteUnreal {
 // newExtraTokenList 逐条输入额外 token（+ / −），保存时换行拼接。
 func newExtraTokenList(raw string) (fyne.CanvasObject, func() string) {
 	values := config.ParseAuthTokens(raw)
-	if len(values) == 0 {
-		values = []string{""}
-	}
 	entries := make([]*widget.Entry, 0, len(values))
 	for _, v := range values {
-		e := widget.NewEntry()
+		e := widget.NewPasswordEntry()
 		e.SetPlaceHolder(i18n.T("settings.extra_token_placeholder"))
 		e.SetText(v)
 		entries = append(entries, e)
@@ -389,22 +363,18 @@ func newExtraTokenList(raw string) (fyne.CanvasObject, func() string) {
 		for i := range entries {
 			i := i
 			del := widget.NewButton(i18n.T("settings.remove_token"), func() {
-				if len(entries) <= 1 {
-					entries[0].SetText("")
-					return
-				}
 				entries = append(entries[:i], entries[i+1:]...)
 				rebuild()
 			})
 			objs = append(objs, container.NewBorder(nil, nil, nil, del, entries[i]))
 		}
 		add := widget.NewButton(i18n.T("settings.add_token"), func() {
-			e := widget.NewEntry()
+			e := widget.NewPasswordEntry()
 			e.SetPlaceHolder(i18n.T("settings.extra_token_placeholder"))
 			entries = append(entries, e)
 			rebuild()
 		})
-		objs = append(objs, add)
+		objs = append(objs, container.NewHBox(add))
 		box.Objects = objs
 		box.Refresh()
 	}

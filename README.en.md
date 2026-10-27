@@ -85,7 +85,7 @@ Screenshots illustrate UI locations. Version numbers and legacy tool names are e
 | Scan UE instances | Manual port scan |
 | Pause / resume agent forwarding | Queue remote calls at the proxy |
 | ✓ Enable proxy | Toggle MCP HTTP (default `:6700`; **off for new installs**) |
-| MCP client config… | Pick protocol (Streamable HTTP / SSE) and client (Cursor / CodeBuddy), then copy one JSON snippet; pick NIC IP when LAN has multiple addresses; Bearer is this machine's token only |
+| MCP client config… | Pick protocol (Streamable HTTP / SSE) and client (Cursor / Windsurf, Claude Code / VS Code, CodeBuddy, Cline, Roo Code, Codex), then copy a JSON / TOML configuration snippet; pick NIC IP when LAN has multiple addresses; Bearer is this machine's token only |
 | Copy auth token | Copy the machine-shared token only |
 | Check for updates | Auto-check on startup and every 6 hours; click to download zip and restart |
 | Settings… | Open settings |
@@ -101,9 +101,11 @@ Released 2.x and current tool-call formats are supported without rewriting reque
 
 ### 3. AI client
 
-Choose **MCP client config…** in the tray, select **Streamable HTTP** and Cursor / CodeBuddy, then copy the generated configuration. Use the URL and token from that window; the port may advance if the default is occupied.
+Choose **MCP client config…** in the tray, select **Streamable HTTP** and the matching client group, then copy the generated configuration. Use the URL and token from that window; the port may advance if the default is occupied.
 
 ![Generated MCP client configuration with the token redacted (Chinese UI)](docs/images/desktop-client-config.png)
+
+Clients are grouped by identical server fragments: **Cursor / Windsurf** share the `url` format; **Claude Code / VS Code** share `type: http/sse`, but use `mcpServers` in `.mcp.json` and `servers` in `.vscode/mcp.json` respectively. **CodeBuddy**, **Cline**, and **Roo Code** have separate presets: Streamable HTTP uses `transportType: streamable-http`, `type: streamableHttp`, and `type: streamable-http` respectively. The window shows placement instructions for each group; the Windsurf preset targets Cascade `mcp_config.json`. **Codex** has a separate TOML preset for `~/.codex/config.toml` (or custom `CODEX_HOME`), with the endpoint and optional `http_headers`. It selects Streamable HTTP automatically. Replace an existing section with the same name instead of duplicating it. See the [official Codex MCP configuration](https://developers.openai.com/codex/mcp).
 
 **Cursor**: merge the generated server entry into `mcpServers` in `~/.cursor/mcp.json` (`%USERPROFILE%\.cursor\mcp.json` on Windows), keeping existing servers. The complete structure is shown below. You can also copy the token from the tray **Copy auth token** or Settings. Multiple tokens: `Bearer <tok1>, <tok2>`. See [usage-guide §1.1](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.md#11-身份验证).
 
@@ -120,7 +122,7 @@ Choose **MCP client config…** in the tray, select **Streamable HTTP** and Curs
 }
 ```
 
-**CodeBuddy / Windsurf**: paste the generated server entry into the client's custom MCP configuration. Its Streamable HTTP entry includes `"transportType": "streamable-http"`.
+**CodeBuddy**: paste the generated server entry into the client's custom MCP configuration. Its Streamable HTTP entry includes `"transportType": "streamable-http"`.
 
 > Replace `<token>` with the copied value. Treat it as a credential: do not commit real tokens or expose them in documentation, chats, or screenshots.
 
@@ -134,7 +136,9 @@ See the [illustrated setup and daily-use examples](https://github.com/bytepine/N
 
 ### 4. Settings window
 
-Double-click the tray icon or **Settings…**. Closing the window hides it to the tray; the app keeps running.
+Open **Settings…** from the tray. Windows can be resized; Save, Close and status feedback stay at the bottom. Changes, including language, take effect together on Save. Closing hides the window and discards unsaved changes; the app keeps running.
+
+Settings are grouped into **General**, **Connection** and **Security**. Scan options, remote UE and additional tokens are collapsed by default; scan and switch instances from the tray. Machine and additional tokens are masked, and extra rows are added on demand. The client configuration window uses the same bottom action area with copy feedback; placement instructions are kept outside the copied fragment.
 
 | Setting | Default | Notes |
 |---------|---------|-------|

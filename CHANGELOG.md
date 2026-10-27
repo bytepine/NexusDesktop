@@ -5,7 +5,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- 统一设置、客户端配置及写入确认窗口的间距、可调整大小布局和底部操作区；设置按常规、连接、安全分组，低频项折叠，实例操作统一保留在托盘，Token 默认隐藏且按需添加；托盘使用原生勾选状态。客户端配置增加复制反馈，说明文字不再混入复制内容；扩展为 Cursor / Windsurf、Codex、Claude Code / VS Code、CodeBuddy、Cline、Roo Code 六组，按实际协议字段生成配置并提示粘贴位置；Codex 输出 TOML 并固定使用 Streamable HTTP。
+
 ### Fixed
+
+- 修复设置保存按钮需滚动到底部才能访问的问题；语言与其他设置一起保存，重复打开已显示的设置窗口不再清空草稿。
 
 - 重新连接 UE 时清理远端工具清单缓存，修复插件升级或切换实例后仍发布旧工具名、导致工具转发失败的问题；补充旧/新工具清单、实际转发、认证字段、结构化错误及超时写请求不重试回归。
 

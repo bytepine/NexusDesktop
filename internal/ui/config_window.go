@@ -19,6 +19,10 @@ const (
 	protoSSE        = "sse"
 	clientCursor    = "cursor"
 	clientCodeBuddy = "codebuddy"
+	clientHTTP      = "http" // Claude Code / VS Code
+	clientCline     = "cline"
+	clientRoo       = "roo"
+	clientCodex     = "codex"
 )
 
 // configWindow 展示 MCP 客户端配置片段：协议 × 客户端各选一项，复制只写入当前一份。
@@ -29,28 +33,25 @@ type configWindow struct {
 	configText   string
 	lastPort     int
 	protocol     string // stream | sse
-	client       string // cursor | codebuddy
+	client       string // 按配置格式分组
 	selectedHost string
 
-	streamBtn    *widget.Button
-	sseBtn       *widget.Button
-	cursorBtn    *widget.Button
-	codebuddyBtn *widget.Button
+	status *widget.Label
+	help   *widget.Label
 }
 
 func newConfigWindow(app fyne.App) *configWindow {
 	cw := &configWindow{app: app, protocol: protoStream, client: clientCursor}
 
 	w := app.NewWindow(i18n.T("mcp.title"))
-	w.Resize(fyne.NewSize(540, 480))
-	w.SetFixedSize(true)
+	w.Resize(fyne.NewSize(640, 560))
 	w.SetCloseIntercept(func() { w.Hide() })
 	cw.win = w
 
 	area := widget.NewMultiLineEntry()
 	area.Wrapping = fyne.TextWrapOff
 	area.TextStyle = fyne.TextStyle{Monospace: true}
-	area.SetMinRowsVisible(12)
+	area.SetMinRowsVisible(6)
 	cw.area = area
 	area.OnChanged = func(s string) {
 		if s != cw.configText {
@@ -94,82 +95,73 @@ func (cw *configWindow) copyHost() string {
 func (cw *configWindow) refreshPreview() {
 	token := config.Get().ProxyToken
 	cw.setConfigText(buildMcpConfig(cw.protocol, cw.client, cw.lastPort, token, cw.copyHost()))
-	cw.highlightButtons()
-}
-
-func (cw *configWindow) highlightButtons() {
-	setOn := func(b *widget.Button, on bool) {
-		if b == nil {
-			return
-		}
-		if on {
-			b.Importance = widget.HighImportance
-		} else {
-			b.Importance = widget.MediumImportance
-		}
-		b.Refresh()
+	if cw.help != nil {
+		cw.help.SetText(i18n.T("mcp.comment_" + cw.client))
 	}
-	setOn(cw.streamBtn, cw.protocol == protoStream)
-	setOn(cw.sseBtn, cw.protocol == protoSSE)
-	setOn(cw.cursorBtn, cw.client == clientCursor)
-	setOn(cw.codebuddyBtn, cw.client == clientCodeBuddy)
-}
-
-func (cw *configWindow) buildContent() fyne.CanvasObject {
-	return cw.buildContentWithPort(0)
+	if cw.status != nil {
+		cw.status.SetText("")
+	}
 }
 
 func (cw *configWindow) buildContentWithPort(port int) fyne.CanvasObject {
-	token := config.Get().ProxyToken
 	cw.lastPort = port
-
-	cw.streamBtn = widget.NewButton(i18n.T("mcp.stream"), func() {
+	cw.status = wrappedLabel("")
+	cw.help = wrappedLabel("")
+	protocol := widget.NewSelect([]string{i18n.T("mcp.stream"), i18n.T("mcp.sse")}, nil)
+	if cw.protocol == protoSSE {
+		protocol.SetSelectedIndex(1)
+	} else {
+		protocol.SetSelectedIndex(0)
+	}
+	protocol.OnChanged = func(s string) {
 		cw.protocol = protoStream
-		cw.refreshPreview()
-	})
-	cw.sseBtn = widget.NewButton(i18n.T("mcp.sse"), func() {
-		cw.protocol = protoSSE
-		cw.refreshPreview()
-	})
-	cw.cursorBtn = widget.NewButton(i18n.T("mcp.cursor"), func() {
-		cw.client = clientCursor
-		cw.refreshPreview()
-	})
-	cw.codebuddyBtn = widget.NewButton(i18n.T("mcp.codebuddy"), func() {
-		cw.client = clientCodeBuddy
-		cw.refreshPreview()
-	})
-
-	copyBtn := widget.NewButton(i18n.T("mcp.copy"), func() {
-		if cw.configText != "" {
-			cw.app.Clipboard().SetContent(cw.configText)
+		if s == i18n.T("mcp.sse") {
+			cw.protocol = protoSSE
 		}
-	})
-	copyBtn.Importance = widget.HighImportance
-
-	copyTokenBtn := widget.NewButton(i18n.T("mcp.copy_token"), func() {
-		if token != "" {
-			cw.app.Clipboard().SetContent(token)
+		cw.refreshPreview()
+	}
+	updateProtocol := func() {
+		if cw.client == clientCodex {
+			protocol.SetSelectedIndex(0)
+			protocol.Disable()
+		} else {
+			protocol.Enable()
 		}
-	})
-
-	protoRow := container.NewBorder(nil, nil, nil, container.NewHBox(copyTokenBtn, copyBtn),
-		container.NewHBox(cw.streamBtn, cw.sseBtn),
-	)
-	clientRow := container.NewHBox(cw.cursorBtn, cw.codebuddyBtn)
-
-	header := container.NewVBox(protoRow, clientRow)
+	}
+	clientIDs := []string{clientCursor, clientCodex, clientHTTP, clientCodeBuddy, clientCline, clientRoo}
+	clientLabels := make([]string, len(clientIDs))
+	selected := 0
+	for i, id := range clientIDs {
+		clientLabels[i] = i18n.T("mcp." + id)
+		if cw.client == id {
+			selected = i
+		}
+	}
+	client := widget.NewSelect(clientLabels, nil)
+	client.SetSelectedIndex(selected)
+	client.OnChanged = func(_ string) {
+		cw.client = clientIDs[client.SelectedIndex()]
+		updateProtocol()
+		cw.refreshPreview()
+	}
+	updateProtocol()
+	header := container.NewVBox(widget.NewForm(
+		widget.NewFormItem(i18n.T("mcp.client"), client),
+		widget.NewFormItem(i18n.T("mcp.protocol"), protocol),
+	))
 	if hostRow := cw.buildHostSelect(); hostRow != nil {
 		header.Add(hostRow)
 	}
-	header.Add(widget.NewSeparator())
-
-	cw.highlightButtons()
-	return container.NewBorder(
-		header,
-		nil, nil, nil,
-		container.NewScroll(cw.area),
-	)
+	header.Add(container.NewPadded(cw.help))
+	copyBtn := widget.NewButton(i18n.T("mcp.copy"), func() {
+		if cw.configText != "" {
+			cw.app.Clipboard().SetContent(cw.configText)
+			cw.status.SetText(i18n.T("mcp.copied"))
+		}
+	})
+	copyBtn.Importance = widget.HighImportance
+	closeBtn := widget.NewButton(i18n.T("settings.close"), func() { cw.win.Hide() })
+	return windowContent(header, cw.area, cw.status, closeBtn, copyBtn)
 }
 
 func (cw *configWindow) buildHostSelect() fyne.CanvasObject {
@@ -209,37 +201,41 @@ func (cw *configWindow) setConfigText(text string) {
 }
 
 func buildMcpConfig(protocol, client string, port int, token, host string) string {
-	headers := mcpAuthHeadersJSON(token)
+	// Codex 的远程连接使用 Streamable HTTP，配置格式为 TOML。
+	if client == clientCodex {
+		text := fmt.Sprintf("[mcp_servers.nexus-unreal]\nurl = %q\n", fmt.Sprintf("http://%s:%d/stream", host, port))
+		if config.Get().RequireAuth && token != "" {
+			text += fmt.Sprintf("http_headers = { Authorization = %q }\n", "Bearer "+token)
+		}
+		return text
+	}
 	path := "/stream"
 	if protocol == protoSSE {
 		path = "/sse"
 	}
-	if client == clientCodeBuddy {
+	name, typeKey, transport := "nexus-unreal", "type", ""
+	switch client {
+	case clientCodeBuddy:
+		name, typeKey = "Nexus", "transportType"
 		if protocol == protoStream {
-			return fmt.Sprintf(
-				i18n.T("mcp.comment_codebuddy")+"\n"+
-					"\"Nexus\": {\n"+
-					"  \"url\": \"http://%s:%d%s\",\n"+
-					"  \"transportType\": \"streamable-http\"%s\n"+
-					"}",
-				host, port, path, headers,
-			)
+			transport = "streamable-http"
 		}
-		return fmt.Sprintf(
-			i18n.T("mcp.comment_codebuddy")+"\n"+
-				"\"Nexus\": {\n"+
-				"  \"url\": \"http://%s:%d%s\"%s\n"+
-				"}",
-			host, port, path, headers,
-		)
+	case clientHTTP:
+		transport = "http"
+	case clientCline:
+		transport = "streamableHttp"
+	case clientRoo:
+		transport = "streamable-http"
 	}
-	return fmt.Sprintf(
-		i18n.T("mcp.comment_cursor")+"\n"+
-			"\"nexus-unreal\": {\n"+
-			"  \"url\": \"http://%s:%d%s\"%s\n"+
-			"}",
-		host, port, path, headers,
-	)
+	if protocol == protoSSE && transport != "" {
+		transport = "sse"
+	}
+	typeLine := ""
+	if transport != "" {
+		typeLine = fmt.Sprintf("  %q: %q,\n", typeKey, transport)
+	}
+	return fmt.Sprintf("%q: {\n%s  \"url\": %q%s\n}",
+		name, typeLine, fmt.Sprintf("http://%s:%d%s", host, port, path), mcpAuthHeadersJSON(token))
 }
 
 func mcpAuthHeadersJSON(token string) string {

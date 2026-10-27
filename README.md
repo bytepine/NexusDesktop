@@ -85,7 +85,7 @@
 | 扫描 UE 实例 | 主动扫端口 |
 | 暂停 / 恢复 Agent 转发 | 远端调用在代理排队 |
 | ✓ 启用中转服务器 | 启停 MCP HTTP（默认 `:6700`；**新安装默认关**） |
-| MCP 客户端配置… | 选协议（Streamable HTTP / SSE）与客户端（Cursor / CodeBuddy）后复制一份 JSON；开 LAN 且多网卡时可选 IP；Bearer 仅本机 token |
+| MCP 客户端配置… | 选协议（Streamable HTTP / SSE）与客户端（Cursor / Windsurf、Claude Code / VS Code、CodeBuddy、Cline、Roo Code、Codex）后复制 JSON / TOML 配置片段；开 LAN 且多网卡时可选 IP；Bearer 仅本机 token |
 | 复制身份验证 Token | 只复制本机共享 token |
 | 检查更新 | 启动与每 6 小时自动检查；点击下载 zip 并重启 |
 | 设置… | 打开设置窗口 |
@@ -101,7 +101,9 @@
 
 ### 3. AI 客户端
 
-推荐从托盘 **MCP 客户端配置…** 选择 **Streamable HTTP** 和 Cursor / CodeBuddy，再复制自动生成的配置。URL 和 Token 使用该窗口给出的值；端口冲突时以实际端口为准。
+推荐从托盘 **MCP 客户端配置…** 选择 **Streamable HTTP** 和对应客户端组，再复制自动生成的配置。URL 和 Token 使用该窗口给出的值；端口冲突时以实际端口为准。
+
+客户端按配置片段格式合并：**Cursor / Windsurf** 共用 `url` 配置；**Claude Code / VS Code** 共用 `type: http/sse`，但分别粘贴到 `.mcp.json` 的 `mcpServers` 与 `.vscode/mcp.json` 的 `servers`。**CodeBuddy**、**Cline**、**Roo Code** 单列，Streamable HTTP 字段分别是 `transportType: streamable-http`、`type: streamableHttp`、`type: streamable-http`。窗口会提示各组的粘贴位置；Windsurf 对应 Cascade 的 `mcp_config.json`。**Codex** 单列，生成可合并到 `~/.codex/config.toml`（或自定义 `CODEX_HOME`）的 TOML，包含地址与按需生成的 `http_headers`，协议固定为 Streamable HTTP；已有同名段时替换，避免重复。[Codex 官方配置说明](https://developers.openai.com/codex/mcp)。
 
 ![MCP 客户端配置窗口，Token 已打码](docs/images/desktop-client-config.png)
 
@@ -120,7 +122,7 @@
 }
 ```
 
-**CodeBuddy / Windsurf**：选择对应客户端后，将生成的条目粘贴到自定义 MCP 配置中；Streamable HTTP 条目包含 `"transportType": "streamable-http"`。
+**CodeBuddy**：选择对应客户端后，将生成的条目粘贴到自定义 MCP 配置中；Streamable HTTP 条目包含 `"transportType": "streamable-http"`。
 
 > Token 是访问凭证。配置示例中的 `<token>` 须替换为实际值；不要把真实 Token 提交到仓库或暴露在文档、聊天及截图中。
 
@@ -134,7 +136,9 @@
 
 ### 4. 设置窗口
 
-双击托盘图标或「设置…」。关闭窗口只藏回托盘，不退出。
+从托盘「设置…」打开。窗口可调整大小，底部的保存、关闭和状态提示始终可见；修改（包括语言）统一在保存后生效。关闭窗口只藏回托盘，不退出，未保存的修改会放弃。
+
+设置分为「常规」「连接」「安全」：扫描参数、远程 UE 与其他机器的 Token 默认折叠；实例扫描和切换统一从托盘操作。本机与额外 Token 默认隐藏，额外 Token 按需添加。客户端配置窗口采用同样的底部操作区，复制后显示反馈；粘贴位置说明不混入配置片段。
 
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
@@ -146,7 +150,7 @@
 | 更新渠道 | 跟随当前版本 | 正式仅正式版；预发布含 beta（可改成仅正式版或强制含预发布） |
 | 允许局域网接入 | 关 | MCP 绑 `0.0.0.0` |
 | 启用 MCP 身份验证 | 开 | 关闭后 AI 连本中转无需 Bearer（同旧版）；连 UE 仍看对方身份验证 |
-| 额外身份验证 Token | （空） | 点 + 逐条添加其他机器 token；本机 UE 自动读文件 |
+| 额外身份验证 Token | （空） | 点「添加 Token」逐条添加其他机器 token；本机 UE 自动读文件 |
 | 远程 UE | （空） | 每行 `host:端口 [token...]` |
 | 界面语言 | 跟随系统 | 简体中文 / English |
 
