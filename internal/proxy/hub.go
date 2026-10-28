@@ -160,10 +160,20 @@ func (h *Hub) Store(info CallInfo, result interface{}, nowMS int64) interface{} 
 		return stored
 	}
 	ttl, snap := ExtractTtlMS(stored, info.Capability, nowMS)
-	if ContentTextLen(stored) > OffloadChars {
+	hasImage := false
+	if rec, ok := stored.(map[string]interface{}); ok {
+		content, _ := rec["content"].([]interface{})
+		for _, item := range content {
+			if block, ok := item.(map[string]interface{}); ok && block["type"] == "image" {
+				hasImage = true
+				break
+			}
+		}
+	}
+	if ContentTextLen(stored) > OffloadChars && !hasImage {
 		stored = h.offload(stored)
 	}
-	if !info.IsWrite && !info.IsBatch && info.Capability != "" {
+	if !info.IsWrite && !info.IsBatch && info.Capability != "" && !hasImage {
 		if snap == "" {
 			snap = time.UnixMilli(nowMS).UTC().Format(time.RFC3339)
 		}

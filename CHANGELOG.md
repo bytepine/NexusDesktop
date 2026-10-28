@@ -7,6 +7,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- 含标准 MCP 图片块的响应保留内联图片及原有元数据，跳过大文本转存与代理缓存。
+
 - 统一中英文首页的 Unreal Engine MCP 桌面客户端定位，突出 NexusLink 依赖，补充安装包、核心插件的 GitHub 地址与文档入口。
 
 ### Added

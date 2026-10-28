@@ -32,6 +32,30 @@ func TestNewHubKeepsFreshOffload(t *testing.T) {
 	}
 }
 
+func TestInlineImagePreservedWithLargeMetadata(t *testing.T) {
+	isolatedOffloadRoot(t)
+	h := NewHub()
+	info := ParseCall("GetAssetBlueprint", map[string]interface{}{"AssetPath": "/Game/ImageProbe"})
+	metadata := map[string]interface{}{"FilePath": "capture.png", "Padding": strings.Repeat("x", OffloadChars+1)}
+	text, _ := json.Marshal(metadata)
+	image := map[string]interface{}{"type": "image", "mimeType": "image/png", "data": "aW1hZ2U="}
+	result := map[string]interface{}{
+		"structuredContent": metadata,
+		"content":           []interface{}{map[string]interface{}{"type": "text", "text": string(text)}, image},
+	}
+	stored := h.Store(info, result, time.Now().UnixMilli()).(map[string]interface{})
+	content := stored["content"].([]interface{})
+	if len(content) != 2 || content[1].(map[string]interface{})["data"] != image["data"] {
+		t.Fatal("inline image was replaced by an offload summary")
+	}
+	if stored["structuredContent"].(map[string]interface{})["FilePath"] != "capture.png" {
+		t.Fatal("structured image metadata was lost")
+	}
+	if h.LookupFresh(info, time.Now().UnixMilli()) != nil {
+		t.Fatal("image result must not enter snapshot cache")
+	}
+}
+
 func TestLegacyCleanupDoesNotTouchOffload(t *testing.T) {
 	dir := t.TempDir()
 	previous := offloadRoot
