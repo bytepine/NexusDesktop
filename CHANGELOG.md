@@ -5,6 +5,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [2.3.1-beta.1] - 2026-10-28
+
+> ⚠️ Pre-release，非生产环境使用。
+
 ### Changed
 
 - 含标准 MCP 图片块的响应保留内联图片及原有元数据，跳过大文本转存与代理缓存。
