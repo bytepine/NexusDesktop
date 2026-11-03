@@ -51,7 +51,7 @@ var stopPie = map[string]struct{}{"stop": {}, "end": {}, "quit": {}, "endplay": 
 func IsEditorOperation(name string) bool {
 	switch name {
 	case "GetEditorSlate", "CaptureEditorSlate", "InteractEditorSlate", "ControlEditorAutomation",
-		"ListEditorAutomationTests", "CompileEditorLiveCoding", "GetEditorOperation",
+		"ListEditorAutomationTests", "CompileEditorLiveCoding", "GetEditorOperation", "ControlEditorOperation",
 		"GetEditorPCG", "ControlEditorPCG", "GetEditorNiagara", "ExecNiagaraStackFix", "SearchAssetsSemantic", "GetProjectSkills",
 		"GetEditorAnimation", "ControlEditorAnimation", "ControlEditorNiagara", "ControlEditorGameFeature", "GetEditorScene", "ControlEditorScene":
 		return true

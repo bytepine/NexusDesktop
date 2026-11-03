@@ -5,6 +5,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+- 同步所属任务取消入口 ControlEditorOperation 的会话路由与缓存策略，补充直接/封装及默认/显式实例回归。
+
 ### Fixed
 
 - 补齐 PCG、Niagara、动画、Game Features、语义搜索、Skill 与场景等编辑器任务的会话转发，创建、查询和取消等待保持同一身份，任务响应不缓存且写入不重试。

@@ -70,6 +70,13 @@ func TestEditorOperationOwnerAndCacheRouting(t *testing.T) {
 						t.Error("operation crossed MCP sessions")
 					}
 					before := calls.Load()
+					if !call(second, "ControlEditorOperation", args, direct, explicit).IsError {
+						t.Error("foreign cancellation accepted")
+					}
+					if call(first, "ControlEditorOperation", args, direct, explicit).IsError {
+						t.Error("cancel owner changed")
+					}
+					before = calls.Load()
 					call(first, capability, map[string]interface{}{}, direct, explicit)
 					if calls.Load() != before+1 {
 						t.Error("task response was cached")

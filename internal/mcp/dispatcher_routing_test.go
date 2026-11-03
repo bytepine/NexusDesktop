@@ -80,7 +80,7 @@ func routingInstance(t *testing.T, name string, toolNames ...string) (int, *atom
 						owner = conn.RemoteAddr().String()
 					}
 					operation, _ := args["OperationId"].(string)
-					if capability == "GetEditorOperation" {
+					if capability == "GetEditorOperation" || capability == "ControlEditorOperation" {
 						original, found := operationOwners.Load(operation)
 						result["isError"] = !found || original != owner
 					} else {
