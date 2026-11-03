@@ -103,6 +103,8 @@ Screenshots illustrate UI locations. Version numbers and legacy tool names are e
 
 A single instance auto-connects; multiple instances prefer `hostKind=Editor` (legacy UE without that field falls back to `netRole=Editor`). Read caches and disconnected snapshots are isolated by UE host/port, so switching instances cannot reuse another instance's data.
 
+While an asynchronous editor write is running, its UE instance bypasses read caches and disconnected snapshots. Caching resumes with a clean snapshot only after all known writes reach an observed terminal state, including failure or cancellation; cancelling a wait does not resume caching. Unobserved tasks and tracking overflow keep caching disabled conservatively; restart the proxy to reset this fallback.
+
 Batch calls and project-wide writes without an asset identity, including GameplayTags changes and partial failures, invalidate the target UE instance's read cache while preserving other instances. An explicit upstream `TtlSeconds: 0` disables caching and clears older snapshots for the same read target, including disconnected snapshots; both standard `structuredContent` and text JSON are supported. Failed reads are never cached. Large-response files are isolated between hubs; only files older than one hour are cleaned up.
 
 Released 2.x and current tool-call formats are supported without rewriting requests. New payloads use a separate temporary root so older 2.x processes cannot delete them during startup cleanup.

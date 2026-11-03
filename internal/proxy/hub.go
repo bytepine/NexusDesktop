@@ -43,19 +43,24 @@ type GatePrompter func(CallInfo) GateDecision
 
 // Hub 进程级会话枢纽。
 type Hub struct {
-	mu         sync.Mutex
-	writeGate  WriteGateMode
-	paused     bool
-	pauseWait  *sync.Cond
-	cache      []*CacheEntry // LRU：尾部最新
+	mu                  sync.Mutex
+	writeGate           WriteGateMode
+	paused              bool
+	pauseWait           *sync.Cond
+	cache               []*CacheEntry // LRU：尾部最新
+	pendingEditorWrites map[string]map[string]struct{}
+	cacheDisabled       bool
+	// 写入失效前发出的读取即使晚到，也不能重新填回旧快照。
+	cacheEpoch uint64
 	prompter   GatePrompter
 	offloadDir string
 }
 
 func NewHub() *Hub {
 	h := &Hub{
-		writeGate:  GateDestructive,
-		offloadDir: filepath.Join(offloadRoot, rand.Text()),
+		writeGate:           GateDestructive,
+		pendingEditorWrites: make(map[string]map[string]struct{}),
+		offloadDir:          filepath.Join(offloadRoot, rand.Text()),
 	}
 	h.pauseWait = sync.NewCond(&h.mu)
 	pruneOffload(offloadMaxAge)
@@ -148,8 +153,18 @@ func (h *Hub) LookupDegraded(info CallInfo, nowMS int64) *LookupHit {
 	return h.lookup(info, nowMS, true)
 }
 
-func (h *Hub) Store(info CallInfo, result interface{}, nowMS int64) interface{} {
+func (h *Hub) CacheGeneration() uint64 {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.cacheEpoch
+}
+
+func (h *Hub) Store(info CallInfo, result interface{}, nowMS int64, generation ...uint64) interface{} {
 	stored := cloneJSON(result)
+	if IsEditorOperation(info.Capability) {
+		h.observeEditorOperation(info, stored)
+		return stored
+	}
 	// 项目级写入无法按资产定位；部分失败也清理本实例，避免旧快照误导读回。
 	if info.IsBatch {
 		h.invalidateIdentity("", info.CacheScope)
@@ -157,9 +172,6 @@ func (h *Hub) Store(info CallInfo, result interface{}, nowMS int64) interface{} 
 		h.invalidateIdentity(info.Identity, info.CacheScope)
 	}
 	if rec, ok := stored.(map[string]interface{}); ok && rec["isError"] == true {
-		return stored
-	}
-	if IsEditorOperation(info.Capability) {
 		return stored
 	}
 	ttl, snap := ExtractTtlMS(stored, info.Capability, nowMS)
@@ -194,6 +206,10 @@ func (h *Hub) Store(info CallInfo, result interface{}, nowMS int64) interface{} 
 			snap = time.UnixMilli(nowMS).UTC().Format(time.RFC3339)
 		}
 		h.mu.Lock()
+		if _, blocked := h.pendingEditorWrites[info.CacheScope]; h.cacheDisabled || blocked || (len(generation) > 0 && generation[0] != h.cacheEpoch) {
+			h.mu.Unlock()
+			return stored
+		}
 		h.cache = append(h.cache, &CacheEntry{
 			ExactKey: info.ExactKey, IdentityKey: info.IdentityKey, CacheScope: info.CacheScope,
 			Capability: info.Capability, Identity: info.Identity, Sections: info.Sections,
@@ -210,6 +226,9 @@ func (h *Hub) Store(info CallInfo, result interface{}, nowMS int64) interface{} 
 func (h *Hub) lookup(info CallInfo, nowMS int64, allowExpired bool) *LookupHit {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if _, blocked := h.pendingEditorWrites[info.CacheScope]; h.cacheDisabled || blocked {
+		return nil
+	}
 	for i := len(h.cache) - 1; i >= 0; i-- {
 		e := h.cache[i]
 		if e.ExactKey == info.ExactKey && h.usable(e, nowMS, allowExpired, info.Capability) {
@@ -238,6 +257,73 @@ func (h *Hub) lookup(info CallInfo, nowMS int64, allowExpired bool) *LookupHit {
 	return nil
 }
 
+func (h *Hub) observeEditorOperation(info CallInfo, result interface{}) {
+	envelope, _ := result.(map[string]interface{})
+	source, _ := envelope["structuredContent"].(map[string]interface{})
+	if source == nil {
+		source = resultTextObject(result)
+	}
+	if source == nil {
+		source = envelope
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if info.IsWrite {
+		h.invalidateIdentityLocked("", info.CacheScope)
+	}
+	observe := func(snapshot, defaults map[string]interface{}) {
+		id, _ := snapshot["OperationId"].(string)
+		if id == "" {
+			id, _ = defaults["OperationId"].(string)
+		}
+		state, ok := snapshot["State"].(string)
+		if !ok {
+			state, _ = defaults["State"].(string)
+		}
+		if id == "" {
+			return
+		}
+		if info.IsWrite && state == "Running" && !h.cacheDisabled {
+			if _, found := h.pendingEditorWrites[info.CacheScope]; !found {
+				// ponytail: 跟踪有界；超限后保守停缓存，重启代理恢复，不能驱逐尚未确认结束的写入。
+				if len(h.pendingEditorWrites) >= MaxCacheEntries {
+					h.cacheDisabled = true
+					clear(h.pendingEditorWrites)
+					h.cache = nil
+					return
+				}
+				h.pendingEditorWrites[info.CacheScope] = make(map[string]struct{})
+			}
+			pending := h.pendingEditorWrites[info.CacheScope]
+			if pending == nil {
+				return
+			}
+			if _, exists := pending[id]; len(pending) >= 128 && !exists {
+				h.pendingEditorWrites[info.CacheScope] = nil
+			} else {
+				pending[id] = struct{}{}
+			}
+		} else if state == "Completed" || state == "Failed" || state == "Cancelled" || state == "Interrupted" {
+			pending := h.pendingEditorWrites[info.CacheScope]
+			if _, found := pending[id]; found {
+				delete(pending, id)
+				h.invalidateIdentityLocked("", info.CacheScope)
+				if len(pending) == 0 {
+					delete(h.pendingEditorWrites, info.CacheScope)
+				}
+			}
+		}
+	}
+	observe(source, nil)
+	defaults, _ := source["Operations_defaults"].(map[string]interface{})
+	operations, _ := source["Operations"].([]interface{})
+	for _, item := range operations {
+		if snapshot, ok := item.(map[string]interface{}); ok {
+			observe(snapshot, defaults)
+		}
+	}
+}
+
 func (h *Hub) usable(e *CacheEntry, nowMS int64, allowExpired bool, cap string) bool {
 	if nowMS-e.StoredAtMS <= e.TTLMS {
 		return true
@@ -251,6 +337,11 @@ func (h *Hub) usable(e *CacheEntry, nowMS int64, allowExpired bool, cap string) 
 func (h *Hub) invalidateIdentity(identity, cacheScope string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	h.invalidateIdentityLocked(identity, cacheScope)
+}
+
+func (h *Hub) invalidateIdentityLocked(identity, cacheScope string) {
+	h.cacheEpoch++
 	out := h.cache[:0]
 	for _, e := range h.cache {
 		if e.CacheScope != cacheScope || (identity != "" && e.Identity != identity) {

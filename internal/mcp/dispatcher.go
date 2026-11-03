@@ -229,6 +229,7 @@ func (d *Dispatcher) handleToolsCall(id interface{}, params map[string]interface
 			map[string]interface{}{"errorKind": "proxy_denied"}), nil
 	}
 	now := time.Now().UnixMilli()
+	cacheGeneration := hub.CacheGeneration()
 	callInfo = proxy.ParseCall(toolName, args, d.manager.CacheScope())
 	if hit := hub.LookupFresh(callInfo, now); hit != nil {
 		return makeResult(id, proxy.WrapCached(hit.Result, hit.Kind, hit.SnapshotAt)), nil
@@ -260,6 +261,7 @@ func (d *Dispatcher) handleToolsCall(id interface{}, params map[string]interface
 			_ = d.manager.EnsureLongConnection()
 			targetPort, targetHost = d.manager.ConnectedAddress()
 		}
+		callInfo = proxy.ParseCall(toolName, args, d.manager.CacheScope())
 		context, _ := d.requests.Load(operationRequestKey(id))
 		request, _ := context.(*operationRequest)
 		if request != nil {
@@ -315,7 +317,7 @@ func (d *Dispatcher) handleToolsCall(id interface{}, params map[string]interface
 		if targetPort <= 0 && callInfo.CacheScope != d.manager.CacheScope() {
 			return makeResult(id, result), nil
 		}
-		return makeResult(id, hub.Store(callInfo, result, now)), nil
+		return makeResult(id, hub.Store(callInfo, result, now, cacheGeneration)), nil
 	}
 	if errObj, ok := resp["error"].(map[string]interface{}); ok {
 		code := errInternalError
