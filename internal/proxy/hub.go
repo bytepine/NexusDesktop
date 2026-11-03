@@ -135,14 +135,14 @@ func (h *Hub) ConfirmIfNeeded(info CallInfo) GateDecision {
 }
 
 func (h *Hub) LookupFresh(info CallInfo, nowMS int64) *LookupHit {
-	if info.IsWrite || info.IsBatch {
+	if info.IsWrite || info.IsBatch || IsEditorOperation(info.Capability) {
 		return nil
 	}
 	return h.lookup(info, nowMS, false)
 }
 
 func (h *Hub) LookupDegraded(info CallInfo, nowMS int64) *LookupHit {
-	if info.IsWrite || info.IsBatch {
+	if info.IsWrite || info.IsBatch || IsEditorOperation(info.Capability) {
 		return nil
 	}
 	return h.lookup(info, nowMS, true)
@@ -150,13 +150,16 @@ func (h *Hub) LookupDegraded(info CallInfo, nowMS int64) *LookupHit {
 
 func (h *Hub) Store(info CallInfo, result interface{}, nowMS int64) interface{} {
 	stored := cloneJSON(result)
-	// 批量操作可能部分成功，先失效目标实例，避免保留旧快照。
+	// 项目级写入无法按资产定位；部分失败也清理本实例，避免旧快照误导读回。
 	if info.IsBatch {
 		h.invalidateIdentity("", info.CacheScope)
-	} else if info.IsWrite && info.Identity != "" {
+	} else if info.IsWrite {
 		h.invalidateIdentity(info.Identity, info.CacheScope)
 	}
 	if rec, ok := stored.(map[string]interface{}); ok && rec["isError"] == true {
+		return stored
+	}
+	if IsEditorOperation(info.Capability) {
 		return stored
 	}
 	ttl, snap := ExtractTtlMS(stored, info.Capability, nowMS)
@@ -172,6 +175,19 @@ func (h *Hub) Store(info CallInfo, result interface{}, nowMS int64) interface{} 
 	}
 	if ContentTextLen(stored) > OffloadChars && !hasImage {
 		stored = h.offload(stored)
+	}
+	if ttl == 0 {
+		// 同一读取对象的旧 All/section/degraded 快照也不能继续复用。
+		h.mu.Lock()
+		out := h.cache[:0]
+		for _, entry := range h.cache {
+			if entry.IdentityKey != info.IdentityKey {
+				out = append(out, entry)
+			}
+		}
+		h.cache = out
+		h.mu.Unlock()
+		return stored
 	}
 	if !info.IsWrite && !info.IsBatch && info.Capability != "" && !hasImage {
 		if snap == "" {

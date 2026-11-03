@@ -230,7 +230,7 @@ func (d *Dispatcher) handleToolsCall(id interface{}, params map[string]interface
 	}
 	now := time.Now().UnixMilli()
 	callInfo = proxy.ParseCall(toolName, args, d.manager.CacheScope())
-	if hit := hub.LookupFresh(callInfo, now); hit != nil && !isEditorOperation(callInfo.Capability) {
+	if hit := hub.LookupFresh(callInfo, now); hit != nil {
 		return makeResult(id, proxy.WrapCached(hit.Result, hit.Kind, hit.SnapshotAt)), nil
 	}
 
@@ -252,7 +252,7 @@ func (d *Dispatcher) handleToolsCall(id interface{}, params map[string]interface
 
 	// 转发到 UE
 	var outcome unreal.WsRequestResult
-	if isEditorOperation(callInfo.Capability) {
+	if proxy.IsEditorOperation(callInfo.Capability) {
 		meta := cloneMapMap(forwardParams["_meta"])
 		meta["nexusSessionId"] = d.sessionID
 		forwardParams["_meta"] = meta
@@ -284,7 +284,7 @@ func (d *Dispatcher) handleToolsCall(id interface{}, params map[string]interface
 
 	switch outcome.Status {
 	case "disconnected":
-		if snap := hub.LookupDegraded(callInfo, now); snap != nil && !isEditorOperation(callInfo.Capability) {
+		if snap := hub.LookupDegraded(callInfo, now); snap != nil {
 			log.Warnf("UE 未连接，返回缓存快照 tool=%.80q capability=%.80q snapshot=%.80q", toolName, callInfo.Capability, snap.SnapshotAt)
 			return makeResult(id, proxy.WrapDegraded(snap.Result, snap.SnapshotAt)), nil
 		}
@@ -313,9 +313,6 @@ func (d *Dispatcher) handleToolsCall(id interface{}, params map[string]interface
 	if result, ok := resp["result"]; ok {
 		// 等待期间切换长连接时，响应不能污染另一个实例的缓存。
 		if targetPort <= 0 && callInfo.CacheScope != d.manager.CacheScope() {
-			return makeResult(id, result), nil
-		}
-		if isEditorOperation(callInfo.Capability) {
 			return makeResult(id, result), nil
 		}
 		return makeResult(id, hub.Store(callInfo, result, now)), nil

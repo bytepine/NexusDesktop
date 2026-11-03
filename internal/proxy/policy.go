@@ -47,6 +47,18 @@ const (
 var destructiveCaps = map[string]struct{}{"deleteasset": {}, "renameasset": {}}
 var stopPie = map[string]struct{}{"stop": {}, "end": {}, "quit": {}, "endplay": {}, "end_play": {}, "end-play": {}}
 
+// 路由与缓存共用同一清单；新增编辑器任务时需同步三端。
+func IsEditorOperation(name string) bool {
+	switch name {
+	case "GetEditorSlate", "CaptureEditorSlate", "InteractEditorSlate", "ControlEditorAutomation",
+		"ListEditorAutomationTests", "CompileEditorLiveCoding", "GetEditorOperation",
+		"GetEditorPCG", "ControlEditorPCG", "GetEditorNiagara", "ExecNiagaraStackFix", "SearchAssetsSemantic", "GetProjectSkills",
+		"GetEditorAnimation", "ControlEditorAnimation", "ControlEditorNiagara", "ControlEditorGameFeature", "GetEditorScene", "ControlEditorScene":
+		return true
+	}
+	return false
+}
+
 type CallInfo struct {
 	ToolName    string
 	Capability  string
@@ -291,11 +303,13 @@ func resultTextObject(result interface{}) map[string]interface{} {
 func ExtractTtlMS(result interface{}, cap string, nowMS int64) (ttlMS int64, snapshotISO string) {
 	ttlMS = DefaultTtlMS(cap)
 	snapshotISO = ""
-	src := resultTextObject(result)
+	envelope, _ := result.(map[string]interface{})
+	src, _ := envelope["structuredContent"].(map[string]interface{})
 	if src == nil {
-		if m, ok := result.(map[string]interface{}); ok {
-			src = m
-		}
+		src = resultTextObject(result)
+	}
+	if src == nil {
+		src = envelope
 	}
 	if src == nil {
 		return ttlMS, snapshotISO
@@ -313,7 +327,7 @@ func ExtractTtlMS(result interface{}, cap string, nowMS int64) (ttlMS int64, sna
 	}
 	switch v := ttlValue.(type) {
 	case float64:
-		if v > 0 {
+		if !math.IsNaN(v) && !math.IsInf(v, 0) && v >= 0 {
 			ttlMS = int64(v * 1000)
 		}
 	}

@@ -28,14 +28,6 @@ func cloneMapMap(value interface{}) map[string]interface{} {
 	}
 	return result
 }
-func isEditorOperation(name string) bool {
-	switch name {
-	case "GetEditorSlate", "CaptureEditorSlate", "InteractEditorSlate", "ControlEditorAutomation", "ListEditorAutomationTests", "CompileEditorLiveCoding", "GetEditorOperation":
-		return true
-	}
-	return false
-}
-
 func (d *Dispatcher) Dispatch(body string) (string, error) { return d.DispatchWithProgress(body, nil) }
 
 // 每个请求独立持有回调；相同客户端 id 不会跨 MCP 会话复用。

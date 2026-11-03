@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -20,6 +21,7 @@ import (
 func routingInstance(t *testing.T, name string, toolNames ...string) (int, *atomic.Int32) {
 	t.Helper()
 	var calls atomic.Int32
+	var operationOwners sync.Map
 	upgrader := websocket.Upgrader{}
 	port := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -64,6 +66,29 @@ func routingInstance(t *testing.T, name string, toolNames ...string) (int, *atom
 				calls.Add(1)
 				text, _ := json.Marshal(map[string]string{"source": name})
 				result["content"] = []interface{}{map[string]interface{}{"type": "text", "text": string(text)}}
+				if name == "operations" {
+					params, _ := request["params"].(map[string]interface{})
+					args, _ := params["arguments"].(map[string]interface{})
+					capability, _ := params["name"].(string)
+					if capability == "CallCapability" {
+						capability, _ = args["Capability"].(string)
+						args, _ = args["Arguments"].(map[string]interface{})
+					}
+					meta, _ := params["_meta"].(map[string]interface{})
+					owner, _ := meta["nexusSessionId"].(string)
+					if owner == "" {
+						owner = conn.RemoteAddr().String()
+					}
+					operation, _ := args["OperationId"].(string)
+					if capability == "GetEditorOperation" {
+						original, found := operationOwners.Load(operation)
+						result["isError"] = !found || original != owner
+					} else {
+						operation = strconv.Itoa(int(calls.Load()))
+						operationOwners.Store(operation, owner)
+					}
+					result["content"] = []interface{}{map[string]interface{}{"type": "text", "text": mustOperationJSON(operation)}}
+				}
 				if name == "failure" {
 					result["isError"] = true
 					result["structuredContent"] = map[string]interface{}{"ErrorKind": "ArgInvalid", "bRolledBack": false, "Error": "contract failure"}
