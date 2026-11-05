@@ -5,6 +5,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- 离线接入提示使用当前 SearchCapabilities 工具名。
+
 ## [2.3.1] - 2026-11-03
 
 ### Added
