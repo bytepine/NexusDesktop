@@ -121,6 +121,25 @@ func TestCanonicalContractAndInstanceCache(t *testing.T) {
 	}
 }
 
+func TestSectionCacheReadOptions(t *testing.T) {
+	parse := func(component, property string, sections ...interface{}) CallInfo {
+		return ParseCall("GetAssetBlueprint", map[string]interface{}{
+			"AssetPath": "/synthetic/BP", "ComponentName": component,
+			"PropertyPaths": []interface{}{property}, "Sections": sections,
+		})
+	}
+	h := NewHub()
+	h.Store(parse("Capsule", "CollisionEnabled", "All"), map[string]interface{}{}, 1000)
+	if h.LookupFresh(parse("Capsule", "CollisionEnabled", "Component"), 1100) == nil {
+		t.Fatal("same read options should reuse a covering section")
+	}
+	for _, info := range []CallInfo{parse("Mesh", "CollisionEnabled", "Component"), parse("Capsule", "bGenerateOverlapEvents", "Component")} {
+		if h.LookupFresh(info, 1100) != nil || h.LookupDegraded(info, 100000) != nil {
+			t.Fatal("section snapshot crossed read options")
+		}
+	}
+}
+
 func TestBatchInvalidationAndFailedReads(t *testing.T) {
 	h := NewHub()
 	a := ParseCall("GetAssetBlueprint", map[string]interface{}{"AssetPath": "/synthetic/BP", "targetPort": float64(45000)})

@@ -23,6 +23,7 @@ var offloadRoot = filepath.Join(os.TempDir(), "nexus-mcp-offload-v2")
 type CacheEntry struct {
 	ExactKey      string
 	IdentityKey   string
+	SectionKey    string
 	CacheScope    string
 	Capability    string
 	Identity      string
@@ -211,7 +212,7 @@ func (h *Hub) Store(info CallInfo, result interface{}, nowMS int64, generation .
 			return stored
 		}
 		h.cache = append(h.cache, &CacheEntry{
-			ExactKey: info.ExactKey, IdentityKey: info.IdentityKey, CacheScope: info.CacheScope,
+			ExactKey: info.ExactKey, IdentityKey: info.IdentityKey, SectionKey: info.SectionKey, CacheScope: info.CacheScope,
 			Capability: info.Capability, Identity: info.Identity, Sections: info.Sections,
 			Result: cloneJSON(stored), StoredAtMS: nowMS, SnapshotAtISO: snap, TTLMS: ttl,
 		})
@@ -238,7 +239,7 @@ func (h *Hub) lookup(info CallInfo, nowMS int64, allowExpired bool) *LookupHit {
 	if info.Identity != "" && len(info.Sections) > 0 {
 		for i := len(h.cache) - 1; i >= 0; i-- {
 			e := h.cache[i]
-			if e.IdentityKey != info.IdentityKey {
+			if e.SectionKey != info.SectionKey {
 				continue
 			}
 			if !SectionsCovered(e.Sections, info.Sections) {

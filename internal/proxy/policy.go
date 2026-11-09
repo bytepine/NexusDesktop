@@ -67,6 +67,7 @@ type CallInfo struct {
 	Sections    []string
 	ExactKey    string
 	IdentityKey string
+	SectionKey  string
 	CacheScope  string
 	IsWrite     bool
 	IsBatch     bool
@@ -273,10 +274,23 @@ func ParseCall(toolName string, args map[string]interface{}, instanceScope ...st
 	raw, _ := json.Marshal(inner)
 	exact, _ := json.Marshal([]string{scope, toolName, capability, string(raw)})
 	identityKey, _ := json.Marshal([]string{scope, capability, ident})
+	sectionArgs := make(map[string]interface{}, len(inner))
+	sectionField := "Sections"
+	if legacy {
+		sectionField = "sections"
+	}
+	for key, value := range inner {
+		if key != sectionField {
+			sectionArgs[key] = value
+		}
+	}
+	sectionRaw, _ := json.Marshal(sectionArgs)
+	sectionKey, _ := json.Marshal([]string{scope, toolName, capability, string(sectionRaw)})
 	return CallInfo{
 		ToolName: toolName, Capability: capability, InnerArgs: inner,
 		Identity: ident, Sections: sections, ExactKey: string(exact), CacheScope: scope,
 		IdentityKey: string(identityKey),
+		SectionKey:  string(sectionKey),
 		IsWrite:     isBatch || IsWriteCapability(capability),
 		IsBatch:     isBatch,
 	}
