@@ -275,7 +275,8 @@ func (d *Dispatcher) handleToolsCall(id interface{}, params map[string]interface
 		_ = d.manager.EnsureLongConnection()
 		callInfo = proxy.ParseCall(toolName, args, d.manager.CacheScope())
 		outcome = d.manager.ForwardToolCall(forwardParams)
-		if outcome.Status == "disconnected" {
+		// 写入可能已在 UE 执行，断线后不能以重连为由再次发送。
+		if outcome.Status == "disconnected" && !callInfo.IsWrite {
 			if d.manager.EnsureLongConnection() {
 				log.Infof("工具转发重连后重试 tool=%.80q capability=%.80q", toolName, callInfo.Capability)
 				callInfo = proxy.ParseCall(toolName, args, d.manager.CacheScope())

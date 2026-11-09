@@ -5,6 +5,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- HTTP 探测或扫描暂时遗漏忙碌 UE 时保留存活的 WebSocket 及进行中请求；显式选择的 Editor 不可见时不自动切换到 Game/DS；写入调用在响应前断线后不再自动重发。
+
 ## [2.3.2] - 2026-11-05
 
 ### Added

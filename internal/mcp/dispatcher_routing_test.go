@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -64,6 +65,9 @@ func routingInstance(t *testing.T, name string, toolNames ...string) (int, *atom
 					}
 				}
 				calls.Add(1)
+				if name == "disconnect" {
+					return // 模拟已收到写入，但响应前连接关闭。
+				}
 				text, _ := json.Marshal(map[string]string{"source": name})
 				result["content"] = []interface{}{map[string]interface{}{"type": "text", "text": string(text)}}
 				if name == "operations" {
@@ -123,6 +127,22 @@ func TestStructuredFailureIsForwardedOnce(t *testing.T) {
 	}
 	if err != nil || json.Unmarshal([]byte(response), &rpc) != nil || !rpc.Result.IsError || rpc.Result.StructuredContent["ErrorKind"] != "ArgInvalid" || calls.Load() != 1 {
 		t.Fatalf("structured failure must survive exactly one write: %s (%v), calls=%d", response, err, calls.Load())
+	}
+}
+
+func TestDisconnectedWriteIsNotRetried(t *testing.T) {
+	port, calls := routingInstance(t, "disconnect", "CallCapability")
+	manager := unreal.NewManager()
+	manager.ScanPortStart, manager.ScanPortEnd = port, port
+	t.Cleanup(manager.Disconnect)
+	if !manager.ConnectTo(port, true) {
+		t.Fatal("connect mock UE")
+	}
+	dispatcher := NewDispatcher(manager, nil, "test")
+	dispatcher.state = stateRunning
+	response, err := dispatcher.Dispatch(`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"CallCapability","arguments":{"Capability":"ManageAssetDataTable","Arguments":{"AssetPath":"/synthetic/DT"}}}}`)
+	if err != nil || !strings.Contains(response, "proxy_not_connected") || calls.Load() != 1 {
+		t.Fatalf("disconnected write must be sent once: %s (%v), calls=%d", response, err, calls.Load())
 	}
 }
 

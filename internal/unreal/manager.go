@@ -186,10 +186,8 @@ func (m *Manager) MaintainConnection() {
 		if info != nil {
 			return // 心跳成功，省去全量扫描
 		}
-		log.Warnf("UE 状态探测失败，重置连接 host=%.80q port=%d", connHost, port)
-		m.mu.Lock()
-		m.resetWsConnection(false)
-		m.mu.Unlock()
+		// HTTP 探测可能被编辑器长任务阻塞；仅 WS 自身断开才能废弃当前连接。
+		log.Warnf("UE 状态探测失败，保留 WS 连接 host=%.80q port=%d", connHost, port)
 	}
 	m.mu.Lock()
 	m.fullScanCountdown = FULL_SCAN_EVERY_N_TICKS
@@ -248,12 +246,12 @@ func (m *Manager) DiscoverInstances() []InstanceInfo {
 		m.mu.Unlock()
 	}
 
-	// 已连接实例不在本轮结果中 → 断开
+	// 扫描遗漏不代表 WS 已失效，不能取消进行中的调用或改连其他实例。
 	m.mu.Lock()
 	connPort = m.ConnectedPort
 	connHost := m.ConnectedHost
 	m.mu.Unlock()
-	if connPort > 0 {
+	if connPort > 0 && !m.IsWsOpen() {
 		found2 := m.instanceList()
 		exists := false
 		for _, i := range found2 {
@@ -286,6 +284,10 @@ func (m *Manager) DiscoverInstances() []InstanceInfo {
 					target = &found[i]
 					break
 				}
+			}
+			// 显式选择的实例暂不可见时等待重连，禁止静默切换到 Game/DS。
+			if target == nil {
+				return found
 			}
 		}
 		if target == nil {
