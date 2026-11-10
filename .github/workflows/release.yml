@@ -121,6 +121,9 @@ jobs:
             --version "${{ needs.meta.outputs.version }}" \
             --output release_notes.md \
             --verify
+          echo "--- Release notes preview (CHANGELOG [${{ needs.meta.outputs.version }}]) ---"
+          cat release_notes.md
+          echo "--- end ---"
 
       - name: Download artifacts
         uses: actions/download-artifact@v8
