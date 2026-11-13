@@ -4,11 +4,11 @@
 
 **Connect AI clients to Unreal Engine without an IDE extension.** NexusDesktop is the standalone desktop client for [NexusLink — Unreal Engine MCP](https://github.com/bytepine/NexusLink), available for Windows and macOS. With NexusLink installed in UE, AI clients can read project context, edit assets, and debug running sessions.
 
-[Download for Windows / macOS](https://github.com/bytepine/NexusDesktop/releases) · [UE plugin (NexusLink)](https://github.com/bytepine/NexusLink) · [Download & install](#download--install) · [NexusLink documentation](https://github.com/bytepine/NexusLink/blob/master/docs/README.md)
+[Download for Windows / macOS](https://github.com/bytepine/NexusDesktop/releases) · [UE plugin (NexusLink)](https://github.com/bytepine/NexusLink) · [Download & install](#download--install) · [NexusLink documentation](https://github.com/bytepine/NexusLink/blob/master/docs/README.en.md)
 
 The app lives in the system tray (menu bar on macOS), discovers and switches between UE instances, generates AI client configuration, and provides a local MCP relay. Engine capabilities come from NexusLink; tool calls are forwarded over WebSocket.
 
-Ports and switch layers: [NexusLink usage guide](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.md). This app is the client layer of the **two-layer** switch (UE Enable MCP + tray Enable proxy). Do not run the Rider or VSCode proxy on the same machine at the same time.
+Ports and switch layers: [NexusLink usage guide](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.en.md). This app is the client layer of the **two-layer** switch (UE Enable MCP + tray Enable proxy). Do not run the Rider or VSCode proxy on the same machine at the same time.
 
 ---
 
@@ -70,7 +70,7 @@ Checks on startup and every 6 hours. Tray **Check for updates** downloads that v
 
 ### 1. UE prerequisites
 
-Install and enable NexusLink, then check **Enable MCP Server** ([usage-guide §2](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.md)).
+Install and enable NexusLink, then check **Enable MCP Server** ([usage-guide §2](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.en.md)).
 
 ### 2. Launch
 
@@ -101,11 +101,11 @@ Screenshots illustrate UI locations. Version numbers and legacy tool names are e
 | Launch on login | Toggle autostart |
 | Quit | Exit |
 
-A single instance auto-connects; multiple instances prefer `hostKind=Editor` (legacy UE without that field falls back to `netRole=Editor`). Read caches and disconnected snapshots are isolated by UE host/port, so switching instances cannot reuse another instance's data.
+A single instance auto-connects; multiple instances prefer `hostKind=Editor` (legacy UE without that field falls back to `netRole=Editor`). If an explicitly selected instance is temporarily unavailable, wait for it to reconnect without switching to another Editor/Game/DS. HTTP probe failures or missed scan results do not discard a live WebSocket or cancel in-flight requests. Read caches and disconnected snapshots are isolated by UE host/port, so switching instances cannot reuse another instance's data. An explicit `targetPort` must be an integer from 1024 to 65535; invalid values return `-32602` without forwarding to the current instance or returning cached data.
 
 While an asynchronous editor write is running, its UE instance bypasses read caches and disconnected snapshots. Caching resumes with a clean snapshot only after all known writes reach an observed terminal state, including failure or cancellation; cancelling a wait does not resume caching. Unobserved tasks and tracking overflow keep caching disabled conservatively; restart the proxy to reset this fallback.
 
-Batch calls and project-wide writes without an asset identity, including GameplayTags changes and partial failures, invalidate the target UE instance's read cache while preserving other instances. An explicit upstream `TtlSeconds: 0` disables caching and clears older snapshots for the same read target, including disconnected snapshots; both standard `structuredContent` and text JSON are supported. Failed reads are never cached. Large-response files are isolated between hubs; only files older than one hour are cleaned up.
+Batch calls and project-wide writes without an asset identity, including GameplayTags changes and partial failures, invalidate the target UE instance's read cache while preserving other instances. An explicit upstream `TtlSeconds: 0` disables caching and clears older snapshots for the same read target, including disconnected snapshots; both standard `structuredContent` and text JSON are supported. Failed reads are never cached. Section caches and disconnected snapshots require all read arguments except `Sections` to match; they are not reused across components, property paths, filters, or default-value baselines. Large-response files are isolated between hubs; only files older than one hour are cleaned up.
 
 Released 2.x and current tool-call formats are supported without rewriting requests. New payloads use a separate temporary root so older 2.x processes cannot delete them during startup cleanup.
 
@@ -117,7 +117,7 @@ Choose **MCP client config…** in the tray, select **Streamable HTTP** and the 
 
 Clients are grouped by identical server fragments: **Cursor / Windsurf** share the `url` format; **Claude Code / VS Code** share `type: http/sse`, but use `mcpServers` in `.mcp.json` and `servers` in `.vscode/mcp.json` respectively. **CodeBuddy**, **Cline**, and **Roo Code** have separate presets: Streamable HTTP uses `transportType: streamable-http`, `type: streamableHttp`, and `type: streamable-http` respectively. The window shows placement instructions for each group; the Windsurf preset targets Cascade `mcp_config.json`. **Codex** has a separate TOML preset for `~/.codex/config.toml` (or custom `CODEX_HOME`), with the endpoint and optional `http_headers`. It selects Streamable HTTP automatically. Replace an existing section with the same name instead of duplicating it. See the [official Codex MCP configuration](https://developers.openai.com/codex/mcp).
 
-**Cursor**: merge the generated server entry into `mcpServers` in `~/.cursor/mcp.json` (`%USERPROFILE%\.cursor\mcp.json` on Windows), keeping existing servers. The complete structure is shown below. You can also copy the token from the tray **Copy auth token** or Settings. Multiple tokens: `Bearer <tok1>, <tok2>`. See [usage-guide §1.1](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.md#11-身份验证).
+**Cursor**: merge the generated server entry into `mcpServers` in `~/.cursor/mcp.json` (`%USERPROFILE%\.cursor\mcp.json` on Windows), keeping existing servers. The complete structure is shown below. You can also copy the token from the tray **Copy auth token** or Settings. Multiple tokens: `Bearer <tok1>, <tok2>`. See [usage-guide §1.1](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.en.md#11-authentication).
 
 ```json
 {
@@ -142,7 +142,7 @@ Clients are grouped by identical server fragments: **Cursor / Windsurf** share t
 2. UE's default SearchMode provides `SearchCapabilities`, `CallCapability`, and `SubmitFeedback`. The relay adds `list_unreal_instances` and `connect_unreal_instance`, usually making 5 tools. If only the two instance tools appear initially, discover and connect to UE, then refresh the list. Older UE plugin versions use snake_case names; follow the actual tool list
 3. Ask the AI to **use MCP to report the current UE editor information** and check the returned project, engine version, and runtime state
 
-See the [illustrated setup and daily-use examples](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.md#3-nexusdesktop) in the NexusLink usage guide (Chinese).
+See the [illustrated setup and daily-use examples](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.en.md#3-nexusdesktop) in the NexusLink usage guide.
 
 ### 4. Settings window
 
@@ -164,7 +164,7 @@ Settings are grouped into **General**, **Connection** and **Security**. Scan opt
 | Remote UE | (empty) | One `host:port [token...]` per line |
 | Language | Follow system | Simplified Chinese / English |
 
-Cross-machine and auth: [usage-guide §1](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.md).
+Cross-machine and auth: [usage-guide §1](https://github.com/bytepine/NexusLink/blob/master/docs/usage-guide.en.md).
 
 ---
 
@@ -176,11 +176,13 @@ Match session events by the hashed `session` value and calls by the `request` nu
 
 The server retains up to 50 MCP sessions. At capacity, it reclaims only sessions with no requests for 30 minutes and no in-flight calls or SSE connections (`idle_timeout`). New connections never evict sessions that are initializing or active; if no capacity can be freed, initialization returns 503 with `Retry-After` (`session_limit`). Clients can end a session with `DELETE /stream` and its session ID (`client_delete`). Reclaimed IDs require a new `initialize`.
 
-When reporting a disconnect, include the incident time, AI client name/version, client error log and Desktop logs covering that time, including relevant rotated `nexusdesktop_*.log` files. Restarting the server invalidates existing sessions; clients must initialize again, which can be triggered by toggling the MCP connection in the client.
+When reporting a disconnect, include the incident time, AI client name/version, client error log and Desktop logs covering that time, including relevant rotated `nexusdesktop_*.log` files. Legacy `nexusdesktop.log` files remain useful for investigating older incidents. Restarting the server invalidates existing sessions; clients must initialize again, which can be triggered by toggling the MCP connection in the client.
+
+UE reconnections and instance switches fetch `tools/list` again instead of reusing tool names and parameters from the previous connection. Unexpected disconnections may retain the last list. If a write disconnects before its response, the outcome is unknown and the proxy never retries automatically; first use read-only checks to confirm what was applied. If an AI client still holds an old schema, reconnect its MCP service to refresh it.
 
 ## Building locally
 
-Run `go vet ./...` and `go test ./...` before submitting. Tests cover the PascalCase contract and local HTTP/WebSocket multi-instance routing. Without CGO/OpenGL, use `go vet -tags ci ./...` and `go test -tags ci ./...` for headless checks; these do not replace a native GUI build.
+Run `go vet ./...` and `go test ./...` before submitting. Tests cover the current PascalCase contract, local HTTP/WebSocket multi-instance routing, tool-list refresh after reconnecting across old/new tool names, and old connections exiting without affecting the current connection. Without CGO/OpenGL, use `go vet -tags ci ./...` and `go test -tags ci ./...` for headless checks; these do not replace a native GUI build.
 
 - Go 1.25+
 - GCC / MinGW-w64 (Windows) or Xcode CLI (macOS) — Fyne needs CGO
@@ -211,7 +213,7 @@ go vet ./...
 go test ./...
 ```
 
-Record product changes in [CHANGELOG.md](CHANGELOG.md) `[Unreleased]`. Tag prefix: `nexus-desktop-v`.
+Record product changes in [CHANGELOG.md](CHANGELOG.en.md) `[Unreleased]`. Tag prefix: `nexus-desktop-v`.
 
 ---
 

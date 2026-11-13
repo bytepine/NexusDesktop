@@ -1,7 +1,9 @@
-# Changelog
+# 更新日志 — NexusDesktop
 
-All notable changes to NexusDesktop are documented here.
-Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+**语言 / Language**: **简体中文** · [English](CHANGELOG.en.md)
+
+NexusDesktop 的所有重要变更均记录于此。
+格式遵循 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)。
 
 ## [Unreleased]
 
