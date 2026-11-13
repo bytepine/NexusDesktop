@@ -3,8 +3,10 @@
 package mcp
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -77,6 +79,111 @@ type sessionSSERecorder struct {
 }
 
 func (w *sessionSSERecorder) Flush() { w.once.Do(func() { close(w.ready) }) }
+
+func TestStopClosesSSEBeforeClientDisconnect(t *testing.T) {
+	s := NewServer(unreal.NewManager(), "test", "")
+	s.httpServer = &http.Server{}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	w := &sessionSSERecorder{ResponseRecorder: httptest.NewRecorder(), ready: make(chan struct{})}
+	r := httptest.NewRequest(http.MethodGet, "/stream", nil).WithContext(ctx)
+	done := make(chan interface{}, 1)
+	go func() {
+		defer func() { done <- recover() }()
+		s.handleSSE(w, r)
+	}()
+	<-w.ready
+	s.Stop()
+	select {
+	case panicValue := <-done:
+		if panicValue != nil {
+			t.Fatalf("SSE stop panicked: %v", panicValue)
+		}
+	case <-time.After(200 * time.Millisecond):
+		cancel()
+		panicValue := <-done
+		t.Fatalf("stop must finish SSE without waiting for the client; client disconnect panic=%v", panicValue)
+	}
+	// 客户端稍后断开或重复 Stop 也不能再次关闭同一 channel。
+	cancel()
+	s.Stop()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.sseClients) != 0 {
+		t.Fatal("stopped server retained SSE clients")
+	}
+}
+
+func TestStopRejectsSSEWhileShutdownWaitsForActiveRequest(t *testing.T) {
+	s := NewServer(unreal.NewManager(), "test", "")
+	entered, release := make(chan struct{}), make(chan struct{})
+	var unblock sync.Once
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(entered)
+		<-release
+	}))
+	defer backend.Close()
+	defer unblock.Do(func() { close(release) })
+	s.httpServer = backend.Config
+	requestDone := make(chan struct{})
+	go func() {
+		defer close(requestDone)
+		response, err := http.Get(backend.URL)
+		if err == nil {
+			response.Body.Close()
+		}
+	}()
+	<-entered
+	// 现有连接的关闭信号确定 Stop 已拍下快照，但 Shutdown 仍在等待请求。
+	client := &sseClient{done: make(chan struct{})}
+	s.sseClients = []*sseClient{client}
+	stopped := make(chan struct{})
+	go func() { s.Stop(); close(stopped) }()
+	<-client.done
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	w := httptest.NewRecorder()
+	s.handleSSE(w, httptest.NewRequest(http.MethodGet, "/stream", nil).WithContext(ctx))
+	unblock.Do(func() { close(release) })
+	<-requestDone
+	<-stopped
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("SSE arriving during shutdown must be rejected, status=%d", w.Code)
+	}
+}
+
+func TestSSEDeliversConcurrentNotificationsAndStops(t *testing.T) {
+	s := NewServer(unreal.NewManager(), "test", "")
+	backend := httptest.NewServer(http.HandlerFunc(s.handleSSE))
+	defer backend.Close()
+	s.httpServer = backend.Config
+	client := backend.Client()
+	client.Timeout = 3 * time.Second
+	response, err := client.Get(backend.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	var senders sync.WaitGroup
+	for i := 0; i < 16; i++ {
+		senders.Add(1)
+		go func() { defer senders.Done(); s.SendToolsChangedNotification() }()
+	}
+	senders.Wait()
+	reader := bufio.NewReader(response.Body)
+	line, err := reader.ReadString('\n')
+	if err != nil || !strings.Contains(line, "notifications/tools/list_changed") {
+		t.Fatalf("SSE notification was lost: %q (%v)", line, err)
+	}
+	stopped := time.Now()
+	s.Stop()
+	if time.Since(stopped) > time.Second {
+		t.Fatal("SSE must finish before the shutdown deadline")
+	}
+	if _, err := io.ReadAll(reader); err != nil {
+		t.Fatalf("SSE must end cleanly before the client closes: %v", err)
+	}
+}
 
 func TestSessionCapacityProtectsActiveAndReclaimsIdle(t *testing.T) {
 	port, _ := routingInstance(t, "session-test")

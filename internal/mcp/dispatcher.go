@@ -124,17 +124,18 @@ func (d *Dispatcher) handleInitialize(id interface{}, params map[string]interfac
 	upstream := d.manager.GetUpstreamInstructions()
 
 	// 预热：最多等 INITIALIZE_WARMUP_MS，超时先返回 prefix，后台继续
-	warmupDone := make(chan struct{}, 1)
-	go func() {
-		defer func() { warmupDone <- struct{}{} }()
+	warmupDone := make(chan string, 1)
+	go func(cached string) {
 		d.manager.MaintainConnection()
 		if d.manager.IsWsOpen() {
 			_ = d.manager.FetchProxyConfig()
-			upstream = d.manager.FetchUpstreamInstructions()
+			cached = d.manager.FetchUpstreamInstructions()
 		}
-	}()
+		// 容量为 1，握手超时后后台仍可完成，不再写握手 goroutine 的变量。
+		warmupDone <- cached
+	}(upstream)
 	select {
-	case <-warmupDone:
+	case upstream = <-warmupDone:
 	case <-time.After(initializeWarmupMs):
 		// 超时先返回，warmup goroutine 后台继续
 		log.Info("MCP initialize 预热超过 2 秒，先完成握手，后台继续连接 UE")
@@ -285,6 +286,10 @@ func (d *Dispatcher) handleToolsCall(id interface{}, params map[string]interface
 		}
 	}
 
+	if callInfo.IsWrite && (outcome.Status == "disconnected" || outcome.Status == "timeout") {
+		// UE 可能已执行写入；失败响应也必须清除旧读取及断线快照。
+		hub.Store(callInfo, map[string]interface{}{"isError": true}, now)
+	}
 	switch outcome.Status {
 	case "disconnected":
 		if snap := hub.LookupDegraded(callInfo, now); snap != nil {
@@ -297,11 +302,19 @@ func (d *Dispatcher) handleToolsCall(id interface{}, params map[string]interface
 			ErrorText: proxyCfg.ErrorMessages.NotConnected,
 		})
 		d.manager.FlushProxyFeedback()
-		return makeErrorWithData(id, errInternalError, proxyCfg.ErrorMessages.NotConnected,
-			map[string]interface{}{"errorKind": "proxy_not_connected"}), nil
+		message := proxyCfg.ErrorMessages.NotConnected
+		if callInfo.IsWrite {
+			message += " " + unknownWriteOutcomeHint
+		}
+		return makeErrorWithData(id, errInternalError, message,
+			forwardingErrorData("proxy_not_connected", callInfo)), nil
 	case "timeout":
 		sec := int(unreal.ToolsCallTimeout().Seconds())
-		msg := fmt.Sprintf("UE request timed out after %ds. %s", sec, proxyCfg.ErrorMessages.TimeoutHint)
+		hint := proxyCfg.ErrorMessages.TimeoutHint
+		if callInfo.IsWrite {
+			hint = unknownWriteOutcomeHint
+		}
+		msg := fmt.Sprintf("UE request timed out after %ds. %s", sec, hint)
 		d.manager.EnqueueProxyFeedback(unreal.ProxyFeedbackEvent{
 			Category:  unreal.ProxyFeedbackTimeout,
 			Tool:      toolName,
@@ -309,7 +322,7 @@ func (d *Dispatcher) handleToolsCall(id interface{}, params map[string]interface
 		})
 		d.manager.FlushProxyFeedback()
 		return makeErrorWithData(id, errInternalError, msg,
-			map[string]interface{}{"errorKind": "proxy_timeout"}), nil
+			forwardingErrorData("proxy_timeout", callInfo)), nil
 	}
 
 	resp := outcome.Response
@@ -329,6 +342,17 @@ func (d *Dispatcher) handleToolsCall(id interface{}, params map[string]interface
 		return makeError(id, code, msg), nil
 	}
 	return makeError(id, errInternalError, "Invalid response from UE instance"), nil
+}
+
+const unknownWriteOutcomeHint = "Write execution status is unknown; verify the UE result before retrying."
+
+func forwardingErrorData(kind string, info proxy.CallInfo) map[string]interface{} {
+	data := map[string]interface{}{"errorKind": kind}
+	if info.IsWrite {
+		data["executionStatus"] = "unknown"
+		data["retryable"] = false
+	}
+	return data
 }
 
 // confirmWrite 执行写门控。「总是允许」只记在当前 Dispatcher（一条 MCP 会话）上。

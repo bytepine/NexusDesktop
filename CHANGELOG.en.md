@@ -7,6 +7,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Stop SSE before shutting down the relay and reject new SSE connections during shutdown. Heartbeats and notifications share the request writer, preventing double closes or concurrent response writes when clients disconnect later.
+- Deliver initialize warmup results through a message, preventing shared-variable access after the handshake times out while retaining updated instruction caches for later handshakes.
+- Report unknown execution status and disable automatic retries for disconnected or timed-out writes; invalidate old reads and disconnected snapshots so they cannot be mistaken for the post-write state.
+
 ## [2.3.3] - 2026-11-10
 
 ### Fixed

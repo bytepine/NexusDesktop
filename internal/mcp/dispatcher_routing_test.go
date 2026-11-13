@@ -12,6 +12,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/bytepine/NexusDesktop/internal/proxy"
 	"github.com/bytepine/NexusDesktop/internal/unreal"
@@ -140,9 +141,17 @@ func TestDisconnectedWriteIsNotRetried(t *testing.T) {
 	}
 	dispatcher := NewDispatcher(manager, nil, "test")
 	dispatcher.state = stateRunning
+	readInfo := proxy.ParseCall("CallCapability", map[string]interface{}{
+		"Capability": "GetAssetDataTable", "Arguments": map[string]interface{}{"AssetPath": "/synthetic/DT"},
+	}, manager.CacheScope())
+	now := time.Now().UnixMilli()
+	manager.Hub.Store(readInfo, map[string]interface{}{"content": []interface{}{map[string]interface{}{"type": "text", "text": "old snapshot"}}}, now)
 	response, err := dispatcher.Dispatch(`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"CallCapability","arguments":{"Capability":"ManageAssetDataTable","Arguments":{"AssetPath":"/synthetic/DT"}}}}`)
-	if err != nil || !strings.Contains(response, "proxy_not_connected") || calls.Load() != 1 {
+	if err != nil || !strings.Contains(response, "proxy_not_connected") || !strings.Contains(response, `"executionStatus":"unknown"`) || !strings.Contains(response, `"retryable":false`) || calls.Load() != 1 {
 		t.Fatalf("disconnected write must be sent once: %s (%v), calls=%d", response, err, calls.Load())
+	}
+	if manager.Hub.LookupFresh(readInfo, now) != nil || manager.Hub.LookupDegraded(readInfo, now) != nil {
+		t.Fatal("unknown write outcome must invalidate old reads and disconnected snapshots")
 	}
 }
 

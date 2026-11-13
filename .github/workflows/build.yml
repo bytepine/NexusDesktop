@@ -28,3 +28,6 @@ jobs:
 
       - name: Test
         run: go test ./...
+
+      - name: Race test relay and connection lifecycle
+        run: go test -race ./internal/mcp ./internal/proxy ./internal/unreal ./internal/config

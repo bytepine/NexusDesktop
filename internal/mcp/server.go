@@ -47,6 +47,7 @@ type Server struct {
 	mu         sync.Mutex
 	sessions   map[string]*httpSession
 	sseClients []*sseClient
+	stopping   bool
 
 	Port           int
 	proxyToken     string
@@ -61,9 +62,13 @@ type httpSession struct {
 }
 
 type sseClient struct {
-	w       http.ResponseWriter
-	flusher http.Flusher
-	done    chan struct{}
+	done          chan struct{}
+	notifications chan string
+	stopOnce      sync.Once
+}
+
+func (c *sseClient) stop() {
+	c.stopOnce.Do(func() { close(c.done) })
 }
 
 // NewServer 创建 MCP HTTP 服务器实例。
@@ -101,13 +106,15 @@ func (s *Server) Start(preferredPort int, bindHost string) (int, error) {
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
-	s.httpServer = srv
-
 	ln, err := net.Listen("tcp", srv.Addr)
 	if err != nil {
 		return 0, err
 	}
+	s.mu.Lock()
+	s.httpServer = srv
 	s.Port = port
+	s.stopping = false
+	s.mu.Unlock()
 	log.Infof("MCP 服务器已就绪：http://%s:%d/stream bind=%s", unreal.McpDisplayHost(bindHost != unreal.LoopbackHost), port, bindHost)
 
 	go func() {
@@ -120,24 +127,27 @@ func (s *Server) Start(preferredPort int, bindHost string) (int, error) {
 
 // Stop 优雅关闭服务器。
 func (s *Server) Stop() {
-	if s.httpServer == nil {
+	s.mu.Lock()
+	if s.httpServer == nil || s.stopping {
+		s.mu.Unlock()
 		return
 	}
-	s.mu.Lock()
+	srv := s.httpServer
+	s.stopping = true
 	log.Infof("MCP 服务器停止 port=%d sessions=%d sse=%d；现有会话将失效", s.Port, len(s.sessions), len(s.sseClients))
+	// 先结束长连接；Shutdown 自身不会终止活跃的 SSE handler。
+	for _, c := range s.sseClients {
+		c.stop()
+	}
 	s.mu.Unlock()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	if err := s.httpServer.Shutdown(ctx); err != nil {
+	if err := srv.Shutdown(ctx); err != nil {
 		log.Warnf("MCP 服务器关闭未完成: %v", err)
 	}
+	s.mu.Lock()
 	s.httpServer = nil
 	s.Port = 0
-
-	s.mu.Lock()
-	for _, c := range s.sseClients {
-		close(c.done)
-	}
 	s.sseClients = nil
 	s.sessions = make(map[string]*httpSession)
 	s.mu.Unlock()
@@ -145,6 +155,8 @@ func (s *Server) Stop() {
 
 // IsRunning 返回服务器是否正在运行。
 func (s *Server) IsRunning() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return s.httpServer != nil
 }
 
@@ -155,38 +167,13 @@ func (s *Server) SendToolsChangedNotification() {
 	clients := append([]*sseClient{}, s.sseClients...)
 	s.mu.Unlock()
 
-	var dead []*sseClient
 	for _, c := range clients {
 		select {
 		case <-c.done:
-			dead = append(dead, c)
+		case c.notifications <- payload:
 		default:
-			_, err := fmt.Fprint(c.w, payload)
-			if err != nil {
-				log.Warnf("MCP SSE 通知发送失败: %v", err)
-				dead = append(dead, c)
-				continue
-			}
-			c.flusher.Flush()
+			// 同一变更通知可合并；由 handler 独占 ResponseWriter。
 		}
-	}
-	if len(dead) > 0 {
-		s.mu.Lock()
-		alive := s.sseClients[:0]
-		for _, c := range s.sseClients {
-			isDead := false
-			for _, d := range dead {
-				if c == d {
-					isDead = true
-					break
-				}
-			}
-			if !isDead {
-				alive = append(alive, c)
-			}
-		}
-		s.sseClients = alive
-		s.mu.Unlock()
 	}
 }
 
@@ -411,13 +398,18 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.mu.Lock()
+	if s.stopping {
+		s.mu.Unlock()
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "server is stopping"})
+		return
+	}
 	if len(s.sseClients) >= maxSSEClients {
 		s.mu.Unlock()
 		logHTTPRejection(r, http.StatusServiceUnavailable, "sse_limit")
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "too many SSE clients"})
 		return
 	}
-	client := &sseClient{w: w, flusher: flusher, done: make(chan struct{})}
+	client := &sseClient{done: make(chan struct{}), notifications: make(chan string, 1)}
 	s.sseClients = append(s.sseClients, client)
 	session := s.sessions[r.Header.Get(mcpSessionHeader)]
 	if session != nil {
@@ -428,6 +420,16 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 	log.Infof("MCP SSE 已连接 session=%s remote=%.80q clients=%d", sessionLogID(r.Header.Get(mcpSessionHeader)), r.RemoteAddr, clientCount)
 	defer func() {
+		client.stop()
+		s.mu.Lock()
+		filtered := s.sseClients[:0]
+		for _, c := range s.sseClients {
+			if c != client {
+				filtered = append(filtered, c)
+			}
+		}
+		s.sseClients = filtered
+		s.mu.Unlock()
 		if session != nil {
 			s.releaseSession(session)
 		}
@@ -440,43 +442,26 @@ func (s *Server) handleSSE(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	flusher.Flush()
 
-	// 心跳 goroutine
-	go func() {
-		ticker := time.NewTicker(sseKeepaliveMs)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-client.done:
-				return
-			case <-r.Context().Done():
-				return
-			case <-ticker.C:
-				select {
-				case <-client.done:
-					return
-				default:
-					if _, err := fmt.Fprint(w, ": keepalive\n\n"); err != nil {
-						log.Warnf("MCP SSE 心跳发送失败 session=%s: %v", sessionLogID(r.Header.Get(mcpSessionHeader)), err)
-						return
-					}
-					flusher.Flush()
-				}
-			}
+	// 心跳和通知共用 handler，关闭后不再有后台 goroutine 写响应。
+	ticker := time.NewTicker(sseKeepaliveMs)
+	defer ticker.Stop()
+	for {
+		var payload string
+		select {
+		case <-client.done:
+			return
+		case <-r.Context().Done():
+			return
+		case payload = <-client.notifications:
+		case <-ticker.C:
+			payload = ": keepalive\n\n"
 		}
-	}()
-
-	// 等待客户端断开
-	<-r.Context().Done()
-	close(client.done)
-	s.mu.Lock()
-	filtered := s.sseClients[:0]
-	for _, c := range s.sseClients {
-		if c != client {
-			filtered = append(filtered, c)
+		if _, err := fmt.Fprint(w, payload); err != nil {
+			log.Warnf("MCP SSE 发送失败 session=%s: %v", sessionLogID(r.Header.Get(mcpSessionHeader)), err)
+			return
 		}
+		flusher.Flush()
 	}
-	s.sseClients = filtered
-	s.mu.Unlock()
 }
 
 func (s *Server) releaseSession(session *httpSession) {

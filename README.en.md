@@ -14,6 +14,8 @@ Ports and switch layers: [NexusLink usage guide](https://github.com/bytepine/Nex
 
 Editor operations, including Slate, Automation, PCG, Niagara, animation, Game Features, semantic search and scene tools, use the same MCP session identity for creation, polling and wait cancellation. Progress notifications are supported. GetEditorOperation lists owned task summaries; ControlEditorOperation requests cancellation of owned tasks that expose a stop callback, using the same session route. Task responses are never cached and writes are not retried after disconnection. Live Coding does not promise cancellation.
 
+Writes are never replayed automatically after a disconnection or timeout. Error `data` retains `errorKind` and adds `executionStatus: "unknown"` with `retryable: false`. UE may already have executed the request; inspect the asset or operation state before deciding whether to retry. The relay invalidates related old reads and disconnected snapshots so stale results cannot hide an uncertain write outcome.
+
 Standard MCP PNG/JPEG screenshot blocks stay inline with their FilePath metadata. Responses containing images bypass large-text offloading and proxy caching.
 
 ## Requirements
@@ -182,7 +184,7 @@ UE reconnections and instance switches fetch `tools/list` again instead of reusi
 
 ## Building locally
 
-Run `go vet ./...` and `go test ./...` before submitting. Tests cover the current PascalCase contract, local HTTP/WebSocket multi-instance routing, tool-list refresh after reconnecting across old/new tool names, and old connections exiting without affecting the current connection. Without CGO/OpenGL, use `go vet -tags ci ./...` and `go test -tags ci ./...` for headless checks; these do not replace a native GUI build.
+Run `go vet ./...` and `go test ./...` before submitting. Tests cover the current PascalCase contract, local HTTP/WebSocket multi-instance routing, tool-list refresh after reconnecting across old/new tool names, and old connections exiting without affecting the current connection. Without CGO/OpenGL, use `go vet -tags ci ./...` and `go test -tags ci ./...` for headless checks; these do not replace a native GUI build. Run `go test -race ./internal/mcp ./internal/proxy ./internal/unreal ./internal/config` for concurrency checks covering SSE shutdown, warmup timeouts, and state/cache handling after write disconnections.
 
 - Go 1.25+
 - GCC / MinGW-w64 (Windows) or Xcode CLI (macOS) — Fyne needs CGO

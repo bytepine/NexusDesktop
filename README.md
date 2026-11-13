@@ -14,6 +14,8 @@
 
 ---
 
+写请求断线或超时后不会自动重发；错误的 `data` 保留 `errorKind`，并附带 `executionStatus: "unknown"` 与 `retryable: false`。此时 UE 可能已经执行，请先查询资产或任务状态再决定是否重试。代理会清理相关旧读取与断线快照，避免旧结果掩盖不确定的写入状态。
+
 截图响应中的标准 MCP PNG/JPEG 图片块直接内联透传，并保留 FilePath 元数据；含图片的响应不做大文本转存或代理缓存。
 
 ## 依赖
@@ -180,7 +182,7 @@ UE 重新连接或切换实例后会重新读取 `tools/list`，不沿用上一�
 
 ## 本地构建
 
-提交前运行 `go vet ./...` 与 `go test ./...`，其中包含当前 PascalCase 契约和本地 HTTP/WebSocket 多实例转发、旧/新工具名重连刷新、旧连接退出不影响当前连接的回归。无 CGO/OpenGL 的环境可用 `go vet -tags ci ./...` 与 `go test -tags ci ./...` 做无窗口检查；这不代替原生 GUI 构建。
+提交前运行 `go vet ./...` 与 `go test ./...`，其中包含当前 PascalCase 契约和本地 HTTP/WebSocket 多实例转发、旧/新工具名重连刷新、旧连接退出不影响当前连接的回归。无 CGO/OpenGL 的环境可用 `go vet -tags ci ./...` 与 `go test -tags ci ./...` 做无窗口检查；这不代替原生 GUI 构建。并发检查运行 `go test -race ./internal/mcp ./internal/proxy ./internal/unreal ./internal/config`，覆盖 SSE 停服、预热超时和写入断线后的状态与缓存。
 
 - Go 1.25+
 - GCC / MinGW-w64（Windows）或 Xcode CLI（macOS）— Fyne 需要 CGO
