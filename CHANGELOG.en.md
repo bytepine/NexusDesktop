@@ -13,6 +13,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Deliver initialize warmup results through a message, preventing shared-variable access after the handshake times out while retaining updated instruction caches for later handshakes.
 - Report unknown execution status and disable automatic retries for disconnected or timed-out writes; invalidate old reads and disconnected snapshots so they cannot be mistaken for the post-write state.
 - Preserve `error.data` from UE JSON-RPC errors. Starting, collecting, or disarming a `GetOutputLog` watch bypasses caching. Starting and disarming a watch are never replayed after a disconnection.
+- Count Unicode code points for large-text offloading so Chinese and other multibyte text do not trigger offloading prematurely.
 
 ## [2.3.3] - 2026-11-10
 

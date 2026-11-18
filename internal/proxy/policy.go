@@ -8,6 +8,7 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 type WriteGateMode string
@@ -402,7 +403,7 @@ func ContentTextLen(result interface{}) int {
 	}
 	first, _ := content[0].(map[string]interface{})
 	text, _ := first["text"].(string)
-	return len(text)
+	return utf8.RuneCountInString(text)
 }
 
 func cloneJSON(v interface{}) interface{} {

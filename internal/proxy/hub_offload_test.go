@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -18,6 +19,71 @@ func isolatedOffloadRoot(t *testing.T) string {
 	offloadRoot = dir
 	t.Cleanup(func() { offloadRoot = previous })
 	return dir
+}
+
+func TestOffloadContract(t *testing.T) {
+	isolatedOffloadRoot(t)
+	fixture, err := os.ReadFile("testdata/proxy-offload.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cases []struct {
+		Name        string
+		RepeatText  string
+		RepeatCount int
+		Prefix      string
+		Suffix      string
+		HasImage    bool
+		Offloaded   bool
+	}
+	if err := json.Unmarshal(fixture, &cases); err != nil {
+		t.Fatal(err)
+	}
+	hub := NewHub()
+	info := ParseCall("GetAssetBlueprint", map[string]interface{}{"AssetPath": "/Game/OffloadContract"})
+	for _, scenario := range cases {
+		t.Run(scenario.Name, func(t *testing.T) {
+			body := scenario.Prefix + strings.Repeat(scenario.RepeatText, scenario.RepeatCount) + scenario.Suffix
+			content := []interface{}{map[string]interface{}{"type": "text", "text": body}}
+			if scenario.HasImage {
+				content = append(content, map[string]interface{}{"type": "image", "mimeType": "image/png", "data": "aW1hZ2U="})
+			}
+			result := map[string]interface{}{"content": content}
+			stored := hub.Store(info, result, time.Now().UnixMilli()).(map[string]interface{})
+			inline := reflect.DeepEqual(stored, result)
+			if inline == scenario.Offloaded {
+				t.Fatalf("inline = %v, want %v", inline, !scenario.Offloaded)
+			}
+			if inline {
+				return
+			}
+			first := stored["content"].([]interface{})[0].(map[string]interface{})
+			var summary struct {
+				Proxy struct {
+					Offloaded bool
+					Path      string
+					Bytes     int
+				} `json:"_proxy"`
+			}
+			if err := json.Unmarshal([]byte(first["text"].(string)), &summary); err != nil {
+				t.Fatal(err)
+			}
+			if !summary.Proxy.Offloaded {
+				t.Fatal("missing offload metadata")
+			}
+			payload, err := os.ReadFile(summary.Proxy.Path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var decoded map[string]interface{}
+			if err := json.Unmarshal(payload, &decoded); err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(decoded, result) || summary.Proxy.Bytes != len(payload) {
+				t.Fatal("offload payload or byte count changed")
+			}
+		})
+	}
 }
 
 func TestNewHubKeepsFreshOffload(t *testing.T) {
