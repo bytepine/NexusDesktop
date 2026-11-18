@@ -16,6 +16,8 @@ Editor operations, including Slate, Automation, PCG, Niagara, animation, Game Fe
 
 Writes are never replayed automatically after a disconnection or timeout. Error `data` retains `errorKind` and adds `executionStatus: "unknown"` with `retryable: false`. UE may already have executed the request; inspect the asset or operation state before deciding whether to retry. The relay invalidates related old reads and disconnected snapshots so stale results cannot hide an uncertain write outcome.
 
+The proxy preserves `error.data` from UE, including `bExecuted` and `RetryAfterSeconds` on `EditorBusy` errors. `GetOutputLog` watch requests (`Watch`, `bCollectWatch=true`, `bDisarm=true`) are forwarded to UE without using cached results. Starting and disarming a watch follow the proxy's write confirmation settings and are never replayed after a disconnection.
+
 Standard MCP PNG/JPEG screenshot blocks stay inline with their FilePath metadata. Responses containing images bypass large-text offloading and proxy caching.
 
 ## Requirements

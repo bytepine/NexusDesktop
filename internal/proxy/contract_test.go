@@ -121,6 +121,42 @@ func TestCanonicalContractAndInstanceCache(t *testing.T) {
 	}
 }
 
+func TestLogWatchCache(t *testing.T) {
+	hub := NewHub()
+	payload := map[string]interface{}{"structuredContent": map[string]interface{}{"TtlSeconds": 30.0}}
+	regular := ParseCall("GetOutputLog", map[string]interface{}{"bCollectWatch": false})
+	hub.Store(regular, payload, 1000)
+	for _, tc := range []struct {
+		args  map[string]interface{}
+		write bool
+	}{
+		{map[string]interface{}{"Watch": map[string]interface{}{}}, true},
+		{map[string]interface{}{"bCollectWatch": true}, false},
+		{map[string]interface{}{"bDisarm": true}, true},
+		{map[string]interface{}{"bCollectWatch": true, "bDisarm": true}, true},
+		{map[string]interface{}{"Watch": map[string]interface{}{}}, true},
+	} {
+		info := ParseCall("CallCapability", map[string]interface{}{"Capability": "GetOutputLog", "Arguments": tc.args})
+		if !tc.write {
+			previous := info
+			previous.IsLogWatch = false
+			hub.Store(previous, payload, 1000)
+		}
+		if info.IsWrite != tc.write || hub.LookupFresh(info, 1001) != nil {
+			t.Fatalf("wrong log watch policy: %v", tc.args)
+		}
+		hub.Store(info, payload, 1001)
+		if hub.LookupFresh(info, 1002) != nil || hub.LookupDegraded(info, 1002) != nil {
+			t.Fatalf("watch response was cached: %v", tc.args)
+		}
+	}
+	if hub.LookupFresh(regular, 1002) == nil ||
+		!ParseCall("get_output_log", map[string]interface{}{"disarm": true}).IsWrite ||
+		!ParseCall("get_output_log", map[string]interface{}{"collectWatch": true}).IsLogWatch {
+		t.Fatal("ordinary and legacy log policy")
+	}
+}
+
 func TestSectionCacheReadOptions(t *testing.T) {
 	parse := func(component, property string, sections ...interface{}) CallInfo {
 		return ParseCall("GetAssetBlueprint", map[string]interface{}{

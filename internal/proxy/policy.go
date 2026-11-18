@@ -71,6 +71,7 @@ type CallInfo struct {
 	CacheScope  string
 	IsWrite     bool
 	IsBatch     bool
+	IsLogWatch  bool
 }
 
 func ParseWriteGate(raw string) WriteGateMode {
@@ -286,13 +287,22 @@ func ParseCall(toolName string, args map[string]interface{}, instanceScope ...st
 	}
 	sectionRaw, _ := json.Marshal(sectionArgs)
 	sectionKey, _ := json.Marshal([]string{scope, toolName, capability, string(sectionRaw)})
+	isLog := policyName(capability) == "getoutputlog"
+	watchKey, collectKey, disarmKey := "Watch", "bCollectWatch", "bDisarm"
+	if legacy {
+		watchKey, collectKey, disarmKey = "watch", "collectWatch", "disarm"
+	}
+	_, arm := inner[watchKey].(map[string]interface{})
+	changesWatch := isLog && (arm || inner[disarmKey] == true)
+	isLogWatch := changesWatch || (isLog && inner[collectKey] == true)
 	return CallInfo{
 		ToolName: toolName, Capability: capability, InnerArgs: inner,
 		Identity: ident, Sections: sections, ExactKey: string(exact), CacheScope: scope,
 		IdentityKey: string(identityKey),
 		SectionKey:  string(sectionKey),
-		IsWrite:     isBatch || IsWriteCapability(capability),
+		IsWrite:     isBatch || changesWatch || IsWriteCapability(capability),
 		IsBatch:     isBatch,
+		IsLogWatch:  isLogWatch,
 	}
 }
 

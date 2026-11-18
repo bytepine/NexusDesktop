@@ -339,6 +339,9 @@ func (d *Dispatcher) handleToolsCall(id interface{}, params map[string]interface
 			code = int(c)
 		}
 		msg, _ := errObj["message"].(string)
+		if data, present := errObj["data"]; present {
+			return makeErrorWithData(id, code, msg, data), nil
+		}
 		return makeError(id, code, msg), nil
 	}
 	return makeError(id, errInternalError, "Invalid response from UE instance"), nil
@@ -486,7 +489,7 @@ func makeError(id interface{}, code int, message string) string {
 	return string(b)
 }
 
-func makeErrorWithData(id interface{}, code int, message string, data map[string]interface{}) string {
+func makeErrorWithData(id interface{}, code int, message string, data interface{}) string {
 	msg := map[string]interface{}{
 		"jsonrpc": "2.0",
 		"id":      id,

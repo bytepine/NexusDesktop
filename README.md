@@ -16,6 +16,8 @@
 
 写请求断线或超时后不会自动重发；错误的 `data` 保留 `errorKind`，并附带 `executionStatus: "unknown"` 与 `retryable: false`。此时 UE 可能已经执行，请先查询资产或任务状态再决定是否重试。代理会清理相关旧读取与断线快照，避免旧结果掩盖不确定的写入状态。
 
+代理保留 UE 返回的 `error.data`，包括 `EditorBusy` 的 `bExecuted` 和 `RetryAfterSeconds`。`GetOutputLog` 的监听请求（`Watch`、`bCollectWatch=true`、`bDisarm=true`）实时转发到 UE。开启和解除监听遵循代理的写入确认设置，断线后不会自动重发。
+
 截图响应中的标准 MCP PNG/JPEG 图片块直接内联透传，并保留 FilePath 元数据；含图片的响应不做大文本转存或代理缓存。
 
 ## 依赖

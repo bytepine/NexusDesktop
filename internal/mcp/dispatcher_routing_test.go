@@ -66,6 +66,12 @@ func routingInstance(t *testing.T, name string, toolNames ...string) (int, *atom
 					}
 				}
 				calls.Add(1)
+				if name == "busy" {
+					_ = conn.WriteJSON(map[string]interface{}{"jsonrpc": "2.0", "id": request["id"], "error": map[string]interface{}{
+						"code": -32002, "message": "EditorBusy", "data": map[string]interface{}{"ErrorKind": "EditorBusy", "bExecuted": false, "RetryAfterSeconds": 0.5},
+					}})
+					continue
+				}
 				if name == "disconnect" {
 					return // 模拟已收到写入，但响应前连接关闭。
 				}
@@ -108,6 +114,29 @@ func routingInstance(t *testing.T, name string, toolNames ...string) (int, *atom
 	endpoint, _ := url.Parse(server.URL)
 	port, _ = strconv.Atoi(endpoint.Port())
 	return port, &calls
+}
+
+func TestUpstreamErrorData(t *testing.T) {
+	port, calls := routingInstance(t, "busy", "CallCapability")
+	manager := unreal.NewManager()
+	t.Cleanup(manager.Disconnect)
+	if !manager.ConnectTo(port, true) {
+		t.Fatal("connect mock UE")
+	}
+	dispatcher := NewDispatcher(manager, nil, "test")
+	dispatcher.state = stateRunning
+	response, err := dispatcher.Dispatch(`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"CallCapability","arguments":{"Capability":"GetOutputLog","Arguments":{"Watch":{}}}}}`)
+	var rpc struct {
+		Error struct {
+			Code    int
+			Message string
+			Data    map[string]interface{}
+		}
+	}
+	if err != nil || json.Unmarshal([]byte(response), &rpc) != nil || calls.Load() != 1 || rpc.Error.Code != -32002 || rpc.Error.Message != "EditorBusy" ||
+		rpc.Error.Data["ErrorKind"] != "EditorBusy" || rpc.Error.Data["bExecuted"] != false || rpc.Error.Data["RetryAfterSeconds"] != 0.5 {
+		t.Fatalf("upstream busy details lost: %s (%v)", response, err)
+	}
 }
 
 func TestStructuredFailureIsForwardedOnce(t *testing.T) {

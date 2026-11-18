@@ -169,7 +169,7 @@ func (h *Hub) Store(info CallInfo, result interface{}, nowMS int64, generation .
 	// 项目级写入无法按资产定位；部分失败也清理本实例，避免旧快照误导读回。
 	if info.IsBatch {
 		h.invalidateIdentity("", info.CacheScope)
-	} else if info.IsWrite {
+	} else if info.IsWrite && !info.IsLogWatch {
 		h.invalidateIdentity(info.Identity, info.CacheScope)
 	}
 	if rec, ok := stored.(map[string]interface{}); ok && rec["isError"] == true {
@@ -188,6 +188,9 @@ func (h *Hub) Store(info CallInfo, result interface{}, nowMS int64, generation .
 	}
 	if ContentTextLen(stored) > OffloadChars && !hasImage {
 		stored = h.offload(stored)
+	}
+	if info.IsLogWatch {
+		return stored
 	}
 	if ttl == 0 {
 		// 同一读取对象的旧 All/section/degraded 快照也不能继续复用。
@@ -225,6 +228,9 @@ func (h *Hub) Store(info CallInfo, result interface{}, nowMS int64, generation .
 }
 
 func (h *Hub) lookup(info CallInfo, nowMS int64, allowExpired bool) *LookupHit {
+	if info.IsLogWatch {
+		return nil
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if _, blocked := h.pendingEditorWrites[info.CacheScope]; h.cacheDisabled || blocked {
